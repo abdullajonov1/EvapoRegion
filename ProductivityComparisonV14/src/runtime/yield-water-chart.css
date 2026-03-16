@@ -1,0 +1,6621 @@
+/* ===================================================================
+   YIELD WATER XY CHART — FULL CSS (clean, no duplicates)
+   Includes: filters dropdowns + chart states + tooltips + ANGLED X/Y axis buttons + axis dropdowns
+   =================================================================== */
+
+/* =========================
+   CSS VARIABLES
+   ========================= */
+:root {
+  --widget-bg-primary: #2c3e50;
+  --widget-bg-secondary: #34495e;
+  --widget-bg-tertiary: #3a4a5c;
+  --widget-bg-elevated: #445566;
+  --widget-bg-overlay: rgba(26, 37, 47, 0.95);
+
+  --text-primary: #ffffff;
+  --text-secondary: #bdc3c7;
+  --text-muted: #8892a6;
+  --text-accent: #3498db;
+
+  --border-primary: #485c6b;
+  --border-secondary: #3a4a5c;
+  --border-accent: #3498db;
+  --border-hover: #556677;
+
+  --btn-primary: #3498db;
+  --btn-primary-hover: #2980b9;
+  --btn-secondary: #34495e;
+  --btn-danger: #e74c3c;
+  --btn-success: #27ae60;
+
+  --chart-grid: #3a4a5c;
+  --chart-axis: #5a6c7d;
+  --chart-text: #8892a6;
+  --chart-point: #3498db;
+
+  --shadow-light: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-medium: 0 4px 8px rgba(0, 0, 0, 0.15);
+  --shadow-heavy: 0 8px 16px rgba(0, 0, 0, 0.25);
+  --shadow-dropdown: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+  --transition-slow: 0.4s ease;
+
+  --dropdown-max-height: 220px;
+  --border-radius: 6px;
+}
+
+/* =========================
+   MAIN WIDGET CONTAINER
+   ========================= */
+.yield-water-chart-widget {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  background: var(--widget-bg-primary);
+  color: var(--text-primary);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Arial", sans-serif;
+  border-radius: 8px;
+  overflow-y: auto; /* Widget o'zi ham scroll bo'ladi */
+  overflow-x: hidden;
+  box-shadow: var(--shadow-heavy);
+  border: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  /* Container query support */
+  container-type: inline-size;
+  container-name: widget;
+  /* Qimirlavchi masalani hal qilish */
+  box-sizing: border-box;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Responsive widget */
+@media (max-width: 768px) {
+  .yield-water-chart-widget {
+    min-height: 350px;
+  }
+}
+
+@media (max-width: 480px) {
+  .yield-water-chart-widget {
+    min-height: 300px;
+  }
+}
+
+/* =========================
+   HEADER
+   ========================= */
+.widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--widget-bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  min-height: 44px;
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.widget-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.025em;
+}
+
+/* Responsive header */
+@media (max-width: 768px) {
+  .widget-header {
+    padding: 8px 12px;
+    min-height: 40px;
+  }
+
+  .widget-title {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .widget-header {
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+
+  .widget-title {
+    font-size: 13px;
+  }
+}
+
+/* =========================
+   THEME TOGGLE SWITCH
+   ========================= */
+.theme-toggle {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.theme-toggle:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.theme-toggle:active {
+  transform: scale(0.98);
+}
+
+/* =========================
+   FILTERS
+   ========================= */
+.filters-container {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--widget-bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-wrap: wrap;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+  overflow: visible;
+  flex-shrink: 0; /* Filterlar siqilmaydi */
+}
+
+/* Responsive filters */
+@media (max-width: 1200px) {
+  .filters-container {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .filters-container {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filters-container {
+    gap: 4px;
+    padding: 6px 8px;
+  }
+}
+
+/* ========================= 
+   CLEAR FILTERS BUTTON
+   ========================= */
+.filter-clear-btn {
+  height: 32px;
+  padding: 0 16px;
+  background: var(--btn-danger);
+  border: 1px solid var(--btn-danger);
+  border-radius: var(--border-radius);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-normal);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(231, 76, 60, 0.25);
+  box-sizing: border-box;
+}
+
+.filter-clear-btn:hover:not(:disabled) {
+  background: #c0392b;
+  border-color: #c0392b;
+  box-shadow: 0 4px 8px rgba(231, 76, 60, 0.4);
+  transform: translateY(-1px);
+}
+
+.filter-clear-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(231, 76, 60, 0.25);
+}
+
+.filter-clear-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #bdc3c7;
+  border-color: #bdc3c7;
+}
+
+.filter-clear-btn:focus {
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.3);
+}
+
+/* Responsive clear button */
+@media (max-width: 768px) {
+  .filter-clear-btn {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-clear-btn {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 9px;
+  }
+}
+
+/* =========================
+   SIMPLE DROPDOWNS
+   ========================= */
+.simple-dropdown {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 70px;
+  max-width: 180px;
+}
+
+.simple-dropdown.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Group-by dropdown (Fermer/Tuman/Ekin turi) */
+.group-by-dropdown {
+  /* Allow shrinking inside tight horizontal layouts so it stays on one row
+     together with the clear button */
+  flex: 0 1 auto !important;
+  min-width: 70px !important;
+  max-width: 110px !important;
+}
+
+/* Responsive dropdowns */
+@media (max-width: 1024px) {
+  .simple-dropdown {
+    min-width: 60px;
+    max-width: 160px;
+  }
+  .group-by-dropdown {
+    min-width: 60px !important;
+    max-width: 100px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .simple-dropdown {
+    min-width: 50px;
+    max-width: 140px;
+  }
+  .group-by-dropdown {
+    min-width: 55px !important;
+    max-width: 90px !important;
+  }
+  .yield-water-chart-widget .dropdown-button {
+    height: 30px;
+    padding: 0 24px 0 8px;
+    font-size: 11px;
+  }
+  .filter-clear-btn {
+    height: 30px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .simple-dropdown {
+    min-width: 40px;
+    max-width: 120px;
+  }
+  .group-by-dropdown {
+    min-width: 50px !important;
+    max-width: 80px !important;
+  }
+  .yield-water-chart-widget .dropdown-button {
+    height: 28px;
+    padding: 0 20px 0 6px;
+    font-size: 10px;
+  }
+  .filter-clear-btn {
+    height: 28px;
+    font-size: 10px;
+  }
+}
+
+.yield-water-chart-widget .group-by-dropdown .dropdown-button {
+  height: 32px !important;
+  padding: 0 24px 0 8px !important;
+  font-size: 11px !important;
+  background: var(--widget-bg-tertiary) !important;
+  border: 1px solid var(--border-accent) !important;
+  border-radius: var(--border-radius) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+.yield-water-chart-widget .group-by-dropdown .dropdown-button:hover {
+  background: var(--widget-bg-elevated) !important;
+  border-color: var(--btn-primary) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+.yield-water-chart-widget .dropdown-button {
+  width: 100%;
+  height: 32px;
+  background: var(--widget-bg-tertiary);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--border-radius);
+  color: var(--text-primary);
+  padding: 0 28px 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  position: relative;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.yield-water-chart-widget .dropdown-button:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background-color: var(--widget-bg-elevated);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-light);
+}
+
+.yield-water-chart-widget .dropdown-button:focus {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+  background-color: var(--widget-bg-elevated);
+}
+
+.yield-water-chart-widget .dropdown-button.open {
+  border-color: var(--border-accent);
+  background-color: var(--widget-bg-elevated);
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.yield-water-chart-widget .dropdown-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--widget-bg-secondary);
+}
+
+.filter-clear-btn {
+  height: 32px;
+  font-size: 11px;
+}
+
+.yield-water-chart-widget .dropdown-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.yield-water-chart-widget .dropdown-chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: transform var(--transition-normal);
+  color: var(--text-secondary);
+  pointer-events: none;
+  font-size: 10px;
+  user-select: none;
+}
+
+.yield-water-chart-widget .dropdown-chevron.rotated {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.yield-water-chart-widget .dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #2c3e50;
+  border: 1px solid var(--border-accent);
+  border-top: none;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  box-shadow: var(--shadow-dropdown);
+  z-index: 99999;
+  min-height: 50px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.yield-water-chart-widget .dropdown-content {
+  max-height: var(--dropdown-max-height);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #2c3e50;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-accent) var(--widget-bg-secondary);
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+}
+
+.yield-water-chart-widget .dropdown-content::-webkit-scrollbar {
+  width: 8px;
+}
+.yield-water-chart-widget .dropdown-content::-webkit-scrollbar-track {
+  background: #34495e;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+.yield-water-chart-widget .dropdown-content::-webkit-scrollbar-thumb {
+  background: var(--border-accent);
+  border-radius: 4px;
+  transition: background-color var(--transition-fast);
+  min-height: 20px;
+}
+.yield-water-chart-widget .dropdown-content::-webkit-scrollbar-thumb:hover {
+  background: var(--btn-primary-hover);
+}
+
+.yield-water-chart-widget .dropdown-item {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  box-sizing: border-box;
+  background: #2c3e50;
+}
+
+.yield-water-chart-widget .dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.yield-water-chart-widget .dropdown-item:hover {
+  background: rgba(52, 152, 219, 0.15) !important;
+  color: var(--text-accent);
+  padding-left: 20px;
+  transform: translateX(2px);
+}
+
+.yield-water-chart-widget .dropdown-item.selected {
+  background: rgba(52, 152, 219, 0.25) !important;
+  color: var(--text-accent);
+  font-weight: 600;
+  border-left: 3px solid var(--border-accent);
+}
+
+.yield-water-chart-widget .dropdown-item.selected::after {
+  content: "✓";
+  color: var(--text-accent);
+  font-weight: 700;
+  font-size: 13px;
+  margin-left: 8px;
+}
+
+/* =========================
+   CHART AREA + STATES
+   ========================= */
+.chart-container {
+  flex: 1 1 auto;
+  padding: 12px;
+  background: var(--widget-bg-secondary);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  min-height: 0;
+  box-sizing: border-box;
+  will-change: transform;
+}
+
+.chart-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+/* Chart stage - faqat chart joylashadi */
+.chart-stage {
+  flex: 0 0 auto; /* Chart o'lchamini saqlaydi */
+  position: relative;
+  min-height: 200px;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Responsive padding */
+@media (max-width: 768px) {
+  .chart-container {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-container {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 380px) {
+  .chart-container {
+    padding: 6px;
+  }
+}
+
+/* Selected list panel - widget scroll bo'ladi */
+.selected-list-panel {
+  margin-top: 0;
+  padding: 0 8px 8px 8px;
+  background: var(--widget-bg-tertiary, #3a4a5c);
+  border-radius: 6px;
+  border-top: 2px solid var(--border-accent, #3498db);
+
+  /* Flexbox - tepadan pastga */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+
+  /* FIXED - widget scroll bo'ladi */
+  flex: 1 1 auto;
+  min-height: 0;
+
+  /* Overflow - panel scroll qiladi */
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Indikatorlar qatori - tepada fixed */
+.selected-list-panel .indicators-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+/* Indikator card */
+.selected-list-panel .indicator-card {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 4px 5px;
+  background: var(--bg-tertiary, #3a4a5c);
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Jadval container - scroll bo'ladi */
+.selected-list-panel .selected-table-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #4a5a6c);
+  box-sizing: border-box;
+}
+
+/* Grouped mode panel - for tuman/ekin turi tabs */
+.grouped-mode-panel {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+.grouped-mode-panel .indicators-row {
+  flex: 0 0 auto;
+  margin-bottom: 6px;
+}
+
+/* Grouped data table - scrollable */
+.grouped-data-table {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Base - Default normal sizes (original) - FERMER BOLIMDAGI BILAN BIR XIL */
+.grouped-data-table table {
+  width: 100%;
+  min-width: 100%;
+  flex: 1 1 auto;
+  font-size: 9px !important;
+  table-layout: fixed;
+}
+
+.grouped-data-table thead th {
+  padding: 3px 4px !important;
+  font-size: 9px !important;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* FILTER BUTTONS - grouped-data-table'dagi header buttons */
+.grouped-data-table thead th button {
+  font-size: 11px !important;
+  padding: 6px 8px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.grouped-data-table tbody td {
+  padding: 3px 4px !important;
+  font-size: 9px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.grouped-data-table tbody tr {
+  height: 32px !important;
+}
+
+/* Container queries - widget size bo'yicha dynamic scaling (FERMER BILAN SHUNAQA) */
+@container widget (min-width: 800px) {
+  .grouped-data-table table {
+    font-size: clamp(9px, 1.1cqw, 13px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5cqw, 5px) clamp(4px, 0.7cqw, 7px) !important;
+    font-size: clamp(9px, 1.1cqw, 13px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* BUTTON styling - container query */
+  .grouped-data-table thead th button {
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+    white-space: normal;
+    word-break: break-word;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5cqw, 5px) clamp(4px, 0.7cqw, 7px) !important;
+    font-size: clamp(9px, 1.1cqw, 13px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+
+/* Table responsive styling - Large monitors (900px) */
+@media (max-width: 900px) {
+  .grouped-data-table table {
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .grouped-data-table table {
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 9px !important;
+    padding: 3px 4px !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 28px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .grouped-data-table table {
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 9px !important;
+    padding: 3px 4px !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 26px !important;
+  }
+
+  /* Reduce column widths */
+  .grouped-data-table thead th:nth-child(2),
+  .grouped-data-table tbody td:nth-child(2),
+  .grouped-data-table thead th:nth-child(3),
+  .grouped-data-table tbody td:nth-child(3) {
+    width: 20% !important;
+    max-width: 20% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .grouped-data-table table {
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 9px !important;
+    padding: 3px 4px !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 26px !important;
+  }
+
+  /* Further reduce columns */
+  .grouped-data-table thead th:nth-child(2),
+  .grouped-data-table tbody td:nth-child(2),
+  .grouped-data-table thead th:nth-child(3),
+  .grouped-data-table tbody td:nth-child(3) {
+    width: 18% !important;
+    max-width: 18% !important;
+  }
+
+  .grouped-data-table thead th:nth-child(1),
+  .grouped-data-table tbody td:nth-child(1) {
+    width: 44% !important;
+    max-width: 44% !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .grouped-data-table table {
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 9px !important;
+    padding: 3px 4px !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5vw, 5px) clamp(4px, 0.7vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 12px) !important;
+  }
+}
+
+/* Large monitors (1400px+) - Bigger text on large screens - 75% zoom uchun */
+@media (min-width: 1400px) {
+  .grouped-data-table table {
+    font-size: clamp(10px, 1.2vw, 13px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.6vw, 6px) clamp(4px, 0.8vw, 8px) !important;
+    font-size: clamp(10px, 1.2vw, 13px) !important;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 10px !important;
+    padding: 4px 6px !important;
+    white-space: normal;
+    word-break: break-word;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.6vw, 6px) clamp(4px, 0.8vw, 8px) !important;
+    font-size: clamp(10px, 1.2vw, 13px) !important;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+
+/* Extra large monitors (1600px+) */
+@media (min-width: 1600px) {
+  .grouped-data-table table {
+    font-size: clamp(11px, 1.3vw, 14px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(4px, 0.6vw, 7px) clamp(5px, 0.8vw, 8px) !important;
+    font-size: clamp(11px, 1.3vw, 14px) !important;
+    line-height: 1.2;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(4px, 0.6vw, 7px) clamp(5px, 0.8vw, 8px) !important;
+    font-size: clamp(11px, 1.3vw, 14px) !important;
+    line-height: 1.2;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+
+/* Maximum monitors (1920px+) - 75% zoom va 4K displays - TUMAN VA EKIN TURI UCHUN */
+@media (min-width: 1920px) {
+  .grouped-data-table table {
+    font-size: clamp(12px, 1.4vw, 15px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(4px, 0.7vw, 8px) clamp(5px, 0.9vw, 10px) !important;
+    font-size: clamp(12px, 1.4vw, 15px) !important;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.3;
+  }
+
+  .grouped-data-table thead th button {
+    font-size: 10px !important;
+    padding: 4px 6px !important;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(4px, 0.7vw, 8px) clamp(5px, 0.9vw, 10px) !important;
+    font-size: clamp(12px, 1.4vw, 15px) !important;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.3;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+
+/* Jadval qatorlari */
+.selected-polygons-table tbody tr {
+  height: 28px; /* Har bir qator balandligi */
+}
+
+/* =====================================================
+   FINAL GUARD: keep Evapo-RegionV30 style in light mode
+   (must stay at end of file)
+   ===================================================== */
+html.light-theme .yield-water-chart-widget.evapo-v30-style,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style,
+body.light-theme .yield-water-chart-widget.evapo-v30-style {
+  --widget-bg-primary: #071a2b !important;
+  --widget-bg-secondary: #0d2f49 !important;
+  --widget-bg-tertiary: rgba(9, 28, 44, 0.72) !important;
+  --widget-bg-elevated: rgba(17, 48, 71, 0.84) !important;
+  --widget-bg-overlay: rgba(7, 26, 43, 0.95) !important;
+
+  --text-primary: #e9f8ff !important;
+  --text-secondary: #9cc7dd !important;
+  --text-muted: #8db6cb !important;
+  --text-accent: #3cc7ff !important;
+
+  --border-primary: rgba(126, 214, 255, 0.24) !important;
+  --border-secondary: rgba(126, 214, 255, 0.16) !important;
+  --border-accent: #0ba5ec !important;
+  --border-hover: rgba(95, 225, 255, 0.7) !important;
+
+  color: #e9f8ff !important;
+  border-color: rgba(126, 214, 255, 0.24) !important;
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.2),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.24),
+      transparent 62%
+    ),
+    linear-gradient(156deg, #071a2b 0%, #0d2f49 100%) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style *,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style *,
+body.light-theme .yield-water-chart-widget.evapo-v30-style * {
+  --text-primary: #e9f8ff !important;
+  --text-secondary: #9cc7dd !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .widget-header,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .widget-header,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .widget-header,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filters-container,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .chart-container,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-container,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-wrapper,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .chart-wrapper,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-wrapper,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-area,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .chart-area,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-area,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-inner,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .chart-inner,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-inner {
+  background: transparent !important;
+  color: #e9f8ff !important;
+  border-color: rgba(126, 214, 255, 0.24) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button {
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  ) !important;
+  color: #ffffff !important;
+  border-color: rgba(123, 220, 255, 0.34) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-menu,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-selector-popup,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-selector-popup,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .custom-tooltip,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .custom-tooltip,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .custom-tooltip {
+  background: linear-gradient(156deg, #071a2b 0%, #0d2f49 100%) !important;
+  color: #e9f8ff !important;
+  border-color: rgba(126, 214, 255, 0.24) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item {
+  background: transparent !important;
+  color: #9cc7dd !important;
+  border-bottom-color: rgba(126, 214, 255, 0.14) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item:hover {
+  background: rgba(88, 226, 255, 0.12) !important;
+  color: #3cc7ff !important;
+}
+
+/* ===================================================================
+   Evapo-RegionV30 visual alignment (scoped override for V14)
+   =================================================================== */
+.yield-water-chart-widget.evapo-v30-style {
+  --widget-bg-primary: #071a2b;
+  --widget-bg-secondary: #0d2f49;
+  --widget-bg-tertiary: rgba(9, 28, 44, 0.72);
+  --widget-bg-elevated: rgba(17, 48, 71, 0.84);
+  --widget-bg-overlay: rgba(7, 26, 43, 0.95);
+
+  --text-primary: #e9f8ff;
+  --text-secondary: #9cc7dd;
+  --text-muted: #8db6cb;
+  --text-accent: #3cc7ff;
+
+  --border-primary: rgba(126, 214, 255, 0.24);
+  --border-secondary: rgba(126, 214, 255, 0.16);
+  --border-accent: #0ba5ec;
+  --border-hover: rgba(95, 225, 255, 0.7);
+
+  --btn-primary: #0ea5d8;
+  --btn-primary-hover: #0284c7;
+  --btn-secondary: #0f3c5c;
+  --btn-danger: #dc2626;
+  --btn-success: #22c55e;
+
+  --chart-grid: rgba(126, 214, 255, 0.14);
+  --chart-axis: #9cc7dd;
+  --chart-text: #9cc7dd;
+  --chart-point: #3cc7ff;
+
+  border-radius: 18px;
+  border: 1px solid var(--border-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 34px rgba(3, 11, 22, 0.4);
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.2),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.24),
+      transparent 62%
+    ),
+    linear-gradient(156deg, #071a2b 0%, #0d2f49 100%);
+  font-family: "Manrope", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+.yield-water-chart-widget.evapo-v30-style .widget-header,
+.yield-water-chart-widget.evapo-v30-style .filters-container,
+.yield-water-chart-widget.evapo-v30-style .chart-container,
+.yield-water-chart-widget.evapo-v30-style .chart-inner,
+.yield-water-chart-widget.evapo-v30-style .grouped-mode-panel,
+.yield-water-chart-widget.evapo-v30-style .selected-list-panel,
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-panel {
+  background: transparent !important;
+  border-color: var(--border-primary) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .widget-title {
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.yield-water-chart-widget.evapo-v30-style .simple-dropdown .dropdown-button,
+.yield-water-chart-widget.evapo-v30-style .group-by-dropdown .dropdown-button,
+.yield-water-chart-widget.evapo-v30-style .filter-clear-btn {
+  height: 38px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(123, 220, 255, 0.34) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button:hover:not(:disabled),
+.yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button:hover:not(:disabled),
+.yield-water-chart-widget.evapo-v30-style
+  .filter-clear-btn:hover:not(:disabled) {
+  border-color: rgba(95, 225, 255, 0.7) !important;
+  box-shadow: 0 8px 14px rgba(11, 165, 236, 0.22) !important;
+  transform: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button:focus,
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button.open,
+.yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button:focus,
+.yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button.open {
+  border-color: rgba(95, 225, 255, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(29, 193, 255, 0.24) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .filter-clear-btn {
+  background: linear-gradient(180deg, #ef4444, #dc2626) !important;
+  border-color: rgba(220, 38, 38, 0.82) !important;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 8px 14px rgba(220, 38, 38, 0.2) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-text,
+.yield-water-chart-widget.evapo-v30-style .dropdown-chevron {
+  color: #e9f8ff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-menu {
+  background: linear-gradient(156deg, #071a2b 0%, #0d2f49 100%) !important;
+  border: 1px solid rgba(126, 214, 255, 0.24) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 14px 34px rgba(3, 11, 22, 0.48) !important;
+  backdrop-filter: blur(3px);
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item {
+  color: #9cc7dd !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item:hover {
+  background: rgba(88, 226, 255, 0.12) !important;
+  color: #3cc7ff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item.selected {
+  background: linear-gradient(
+    90deg,
+    rgba(60, 199, 255, 0.2),
+    rgba(11, 165, 236, 0.15)
+  ) !important;
+  color: #3cc7ff !important;
+  border-left: 3px solid #0ba5ec !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .chart-stage,
+.yield-water-chart-widget.evapo-v30-style .selected-table-container,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table,
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table {
+  border-color: rgba(126, 214, 255, 0.22) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .retry-btn {
+  border-radius: 10px;
+  border: 1px solid rgba(123, 220, 255, 0.34) !important;
+  background: linear-gradient(180deg, #19bbff, #0a8ac7) !important;
+  color: #ffffff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .retry-btn:hover:not(:disabled) {
+  border-color: rgba(95, 225, 255, 0.7) !important;
+  box-shadow: 0 8px 14px rgba(11, 165, 236, 0.22) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .empty-state,
+.yield-water-chart-widget.evapo-v30-style .loading-state,
+.yield-water-chart-widget.evapo-v30-style .error-state,
+.yield-water-chart-widget.evapo-v30-style .connection-state,
+.yield-water-chart-widget.evapo-v30-style .connection-error {
+  background: rgba(6, 25, 41, 0.35);
+  border: 1px solid rgba(126, 214, 255, 0.2);
+  border-radius: 12px;
+  color: #e9f8ff;
+}
+
+.yield-water-chart-widget.evapo-v30-style .indicator-card {
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  ) !important;
+  border: 1px solid rgba(123, 220, 255, 0.26) !important;
+  border-radius: 10px !important;
+}
+
+/* Keep Evapo V30 design in global light mode as well */
+html.light-theme .yield-water-chart-widget.evapo-v30-style,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style,
+body.light-theme .yield-water-chart-widget.evapo-v30-style {
+  --widget-bg-primary: #071a2b !important;
+  --widget-bg-secondary: #0d2f49 !important;
+  --widget-bg-tertiary: rgba(9, 28, 44, 0.72) !important;
+  --widget-bg-elevated: rgba(17, 48, 71, 0.84) !important;
+  --widget-bg-overlay: rgba(7, 26, 43, 0.95) !important;
+
+  --text-primary: #e9f8ff !important;
+  --text-secondary: #9cc7dd !important;
+  --text-muted: #8db6cb !important;
+  --text-accent: #3cc7ff !important;
+
+  --border-primary: rgba(126, 214, 255, 0.24) !important;
+  --border-secondary: rgba(126, 214, 255, 0.16) !important;
+  --border-accent: #0ba5ec !important;
+  --border-hover: rgba(95, 225, 255, 0.7) !important;
+
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.2),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.24),
+      transparent 62%
+    ),
+    linear-gradient(156deg, #071a2b 0%, #0d2f49 100%) !important;
+  color: #e9f8ff !important;
+  border-color: rgba(126, 214, 255, 0.24) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .widget-header,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .widget-header,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .widget-header,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filters-container,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .chart-container,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-container,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-inner,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .chart-inner,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-inner {
+  background: transparent !important;
+  color: #e9f8ff !important;
+  border-color: rgba(126, 214, 255, 0.24) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .widget-title,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .widget-title,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .widget-title,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-text,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-text,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-chevron,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-chevron,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-chevron {
+  color: #e9f8ff !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button {
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  ) !important;
+  border-color: rgba(123, 220, 255, 0.34) !important;
+  color: #ffffff !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-menu,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu {
+  background: linear-gradient(156deg, #071a2b 0%, #0d2f49 100%) !important;
+  border-color: rgba(126, 214, 255, 0.24) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item {
+  background: transparent !important;
+  color: #9cc7dd !important;
+  border-bottom-color: rgba(126, 214, 255, 0.14) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item:hover {
+  background: rgba(88, 226, 255, 0.12) !important;
+  color: #3cc7ff !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected {
+  background: linear-gradient(
+    90deg,
+    rgba(60, 199, 255, 0.2),
+    rgba(11, 165, 236, 0.15)
+  ) !important;
+  color: #3cc7ff !important;
+  border-left-color: #0ba5ec !important;
+}
+
+/* Jadval bosh filter buttonlar - base styles */
+.selected-polygons-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.selected-polygons-table th {
+  padding: 6px 8px;
+  background: var(--widget-bg-secondary, #34495e);
+  border-bottom: 1px solid var(--border-color, #4a5a6c);
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.selected-polygons-table th button {
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary, #ffffff);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  transition: all var(--transition-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.selected-polygons-table th button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-accent, #3498db);
+}
+
+.selected-polygons-table th button:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(52, 152, 219, 0.5);
+}
+
+.loading-state,
+.error-state,
+.empty-state,
+.connection-state,
+.connection-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-secondary);
+  border-top: 3px solid var(--btn-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  position: relative;
+}
+
+.loading-spinner::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 2px solid transparent;
+  border-top: 2px solid rgba(52, 152, 219, 0.3);
+  border-radius: 50%;
+  animation: spin 2s linear infinite reverse;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.retry-btn {
+  padding: 10px 20px;
+  background: var(--btn-primary);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--border-radius);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.retry-btn:hover {
+  background: var(--btn-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-medium);
+}
+
+/* Responsive button text */
+.btn-responsive .btn-text-short {
+  display: none;
+}
+
+/* Responsive info text */
+.info-text-detail {
+  display: inline;
+}
+
+.info-text-separator {
+  display: inline;
+}
+
+@media (max-width: 768px) {
+  .btn-responsive .btn-text-full {
+    display: none;
+  }
+  .btn-responsive .btn-text-short {
+    display: inline;
+  }
+  .info-text-detail {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .info-text-separator {
+    display: none;
+  }
+}
+
+/* =========================
+   TOOLTIP
+   ========================= */
+.chart-tooltip {
+  background: rgba(44, 62, 80, 0.95);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--shadow-heavy);
+  backdrop-filter: blur(15px);
+  min-width: 280px;
+  max-width: 420px;
+  width: max-content;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tooltip-header {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-secondary);
+  font-size: 13px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 3px 0;
+}
+
+.tooltip-row .label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tooltip-row .value {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ===================================================================
+   ✅ ANGLED X/Y AXIS BUTTONS + DROPDOWNS (the part you asked for)
+   =================================================================== */
+
+/* Make chart-inner a positioning context */
+.chart-inner {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 10px;
+}
+.chart-stage {
+  position: relative;
+  width: 100%;
+  min-width: 500px;
+  overflow: visible;
+}
+/* full overlay, but doesn't block chart interactions */
+.axis-selectors {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+/* selector containers can be clicked */
+.axis-selector {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 5;
+}
+
+/* Base angled pill button */
+.axis-label-btn {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.03)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: var(--text-primary);
+
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  height: 34px;
+  padding: 0 12px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.axis-label-btn:hover {
+  border-color: rgba(52, 152, 219, 0.55);
+  background: linear-gradient(
+    180deg,
+    rgba(52, 152, 219, 0.16),
+    rgba(255, 255, 255, 0.03)
+  );
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.3),
+    0 0 0 2px rgba(52, 152, 219, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.axis-label-btn.open {
+  border-color: rgba(52, 152, 219, 0.9);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    0 0 0 2px rgba(52, 152, 219, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* X axis button - horizontal, no rotation */
+.axis-label-btn-x {
+  display: inline-flex;
+}
+
+/* Y axis button - vertical text */
+.axis-label-btn-y {
+  height: auto;
+  width: 34px;
+  min-width: 34px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  gap: 6px;
+
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.axis-label-btn-y .axis-prefix {
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  border-radius: 5px;
+}
+
+.axis-label-btn-y .axis-label-text {
+  font-size: 9px;
+}
+
+.axis-label-btn-y .axis-chevron {
+  font-size: 9px;
+}
+
+/* Responsive axis buttons */
+@media (max-width: 768px) {
+  .axis-label-btn {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 9px;
+    gap: 6px;
+  }
+  .axis-label-text {
+    max-width: 200px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 480px) {
+  .axis-label-btn {
+    height: 28px;
+    padding: 0 8px;
+    font-size: 8px;
+    gap: 4px;
+  }
+  .axis-label-text {
+    max-width: 150px;
+    font-size: 8px;
+  }
+}
+
+.axis-prefix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 800;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.axis-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.axis-chevron {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* Axis menu (dropdown) */
+.axis-menu {
+  position: absolute;
+  background: rgba(26, 37, 47, 0.96);
+  border: 1px solid rgba(52, 152, 219, 0.65);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+  min-width: 320px;
+  max-width: 90vw;
+  z-index: 99999;
+}
+
+.axis-menu-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.axis-menu-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.02em;
+}
+
+.axis-menu-list {
+  max-height: 260px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* X menu opens UP */
+.axis-x .axis-menu {
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+}
+
+/* Y menu opens RIGHT */
+.axis-y .axis-menu {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* menu items */
+.axis-menu-item {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition:
+    background 0.14s ease,
+    transform 0.14s ease;
+}
+
+.axis-menu-item:last-child {
+  border-bottom: none;
+}
+
+.axis-menu-item:hover:not(.disabled) {
+  background: rgba(52, 152, 219, 0.16);
+  transform: translateX(2px);
+}
+
+.axis-menu-item.active {
+  background: rgba(52, 152, 219, 0.24);
+}
+
+.axis-menu-item.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.axis-item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.axis-item-label {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.axis-item-code {
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+.axis-check {
+  font-weight: 900;
+  opacity: 0.95;
+}
+
+.axis-lock {
+  opacity: 0.9;
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+@media (max-width: 1200px) {
+  .filters-container {
+    gap: 10px;
+  }
+  .simple-dropdown {
+    min-width: 130px;
+    max-width: 200px;
+  }
+  .dropdown-button {
+    height: 34px;
+    font-size: 14px;
+  }
+  .axis-menu {
+    min-width: 280px;
+  }
+  .axis-label-text {
+    max-width: 220px;
+    font-size: 11px;
+  }
+  .chart-stage {
+    min-width: 450px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .selected-list-panel {
+    max-height: 40vh;
+    padding: 0 6px 6px 6px;
+  }
+  .selected-list-panel .indicators-row {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  .widget-header {
+    padding: 10px 12px;
+    min-height: 48px;
+  }
+  .widget-title {
+    font-size: 15px;
+  }
+  .filters-container {
+    padding: 10px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .simple-dropdown {
+    min-width: calc(50% - 4px);
+    max-width: calc(50% - 4px);
+    flex: 0 0 calc(50% - 4px);
+  }
+  .dropdown-button {
+    height: 32px;
+    font-size: 12px;
+    padding: 0 28px 0 10px;
+  }
+  .chart-container {
+    padding: 12px;
+  }
+  .chart-tooltip {
+    min-width: 260px;
+    max-width: 380px;
+    font-size: 12px;
+    padding: 12px;
+  }
+  .axis-menu {
+    min-width: 260px;
+    max-width: 85vw;
+  }
+  .axis-label-text {
+    max-width: 180px;
+    font-size: 11px;
+  }
+  .chart-stage {
+    min-width: 400px;
+  }
+  .selected-row {
+    padding: 8px 10px;
+  }
+  .selected-row-metrics {
+    min-width: 180px;
+    font-size: 12px;
+  }
+  .selected-row-main {
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .widget-header {
+    padding: 8px 10px;
+    min-height: 44px;
+  }
+  .widget-title {
+    font-size: 15px;
+  }
+
+  .filters-container {
+    padding: 8px 10px;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .simple-dropdown {
+    min-width: 100%;
+    width: 100%;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+  .dropdown-button {
+    height: 30px;
+    font-size: 11px;
+    padding: 0 26px 0 8px;
+  }
+  .dropdown-text {
+    font-size: 11px;
+  }
+
+  .chart-container {
+    padding: 8px;
+    overflow-x: auto;
+  }
+  .chart-tooltip {
+    min-width: 200px;
+    max-width: 320px;
+    font-size: 14px;
+    padding: 10px;
+  }
+
+  .dropdown-item {
+    padding: 8px 10px;
+    font-size: 11px;
+    min-height: 36px;
+  }
+  .dropdown-item:hover {
+    padding-left: 14px;
+  }
+
+  .axis-menu {
+    min-width: 220px;
+    max-width: 90vw;
+  }
+  .axis-label-text {
+    max-width: 140px;
+    font-size: 10px;
+  }
+  .axis-label-btn {
+    height: 30px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .axis-prefix {
+    width: 16px;
+    height: 16px;
+    font-size: 11px;
+  }
+  .chart-stage {
+    min-width: 360px;
+  }
+  .selected-row {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .selected-row-main {
+    min-width: 100%;
+  }
+  .selected-row-metrics {
+    min-width: 100%;
+    font-size: 10px;
+  }
+  .selected-list-scroll {
+    max-height: 200px;
+  }
+  .selected-row-name {
+    font-size: 11px;
+  }
+  .selected-row-id {
+    font-size: 10px;
+  }
+}
+
+/* =========================
+   ACCESSIBILITY / REDUCED MOTION
+   ========================= */
+.dropdown-button:focus,
+.retry-btn:focus,
+.axis-label-btn:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+.selected-list {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.selected-list-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.selected-list-title {
+  font-weight: 700;
+  font-size: 12px;
+  opacity: 0.95;
+}
+
+.selected-list-sub {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.selected-list-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.selected-row {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.selected-row:last-child {
+  border-bottom: none;
+}
+
+.selected-row-main {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+.selected-row-name {
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.selected-row-id {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 2px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  word-break: break-all;
+}
+
+.selected-row-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  opacity: 0.9;
+  min-width: 200px;
+  flex: 0 0 auto;
+}
+
+.selected-row-metrics .metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.selected-row-metrics .k {
+  opacity: 0.75;
+}
+
+.selected-row-metrics .v {
+  font-weight: 700;
+}
+
+/* =========================
+   GROUP BY DROPDOWN (inline with lasso buttons)
+   ========================= */
+.group-by-dropdown {
+  min-width: 100px;
+  max-width: 120px;
+}
+
+.group-by-dropdown .dropdown-button {
+  height: 30px;
+  padding: 4px 28px 4px 10px;
+  font-size: 11px;
+  background: var(--btn-secondary);
+  border-color: var(--border-secondary);
+}
+
+.group-by-dropdown .dropdown-button:hover {
+  background: var(--widget-bg-elevated);
+  border-color: var(--border-accent);
+}
+
+.group-by-dropdown .dropdown-menu {
+  min-width: 100px;
+}
+
+.group-by-dropdown .dropdown-item {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+/* =========================
+   RECHARTS REFERENCE LINE - Z-INDEX FIX
+   ========================= */
+/* Make reference lines appear on top of scatter shapes */
+.recharts-reference-line {
+  pointer-events: none;
+  position: relative !important;
+  z-index: 99999 !important;
+}
+
+.recharts-reference-line line {
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  stroke-width: 2.5px !important;
+  /* Keep full visibility - don't use blend modes that hide behind data */
+  mix-blend-mode: normal !important;
+  filter: drop-shadow(0 0 0.5px rgba(255, 51, 51, 1))
+    drop-shadow(0 0 1px rgba(255, 51, 51, 1));
+  position: relative;
+  z-index: 99999 !important;
+  opacity: 1 !important;
+  paint-order: stroke;
+}
+
+/* Ensure reference line labels are visible */
+.recharts-reference-line text {
+  filter: none !important;
+  font-weight: 700 !important;
+  z-index: 99999 !important;
+  pointer-events: none;
+  paint-order: stroke;
+}
+
+/* Ensure reference lines group renders on top */
+.recharts-reference-lines-group {
+  z-index: 99999 !important;
+  position: relative !important;
+  pointer-events: none;
+}
+
+.recharts-cartesian-axis-wrapper {
+  z-index: 1 !important;
+}
+
+.recharts-surface {
+  position: relative;
+}
+
+/* Ensure scatter/bars are behind reference lines */
+.recharts-scatter-points,
+.recharts-bar-rectangles,
+.recharts-area,
+.recharts-line-points {
+  z-index: 1 !important;
+}
+
+/* =====================================================
+   LIGHT THEME STYLES
+   ===================================================== */
+html.light-theme,
+html[data-theme="light"],
+body.light-theme {
+  --widget-bg-primary: #f5f7fa;
+  --widget-bg-secondary: #ffffff;
+  --widget-bg-tertiary: #e8ecf0;
+  --widget-bg-elevated: #ffffff;
+  --widget-bg-overlay: rgba(255, 255, 255, 0.95);
+
+  --text-primary: #1a2634;
+  --text-secondary: #5a6a7a;
+  --text-muted: #8892a6;
+  --text-accent: #2980b9;
+
+  --border-primary: #d0d8e0;
+  --border-secondary: #e0e6ec;
+  --border-accent: #3498db;
+  --border-hover: #b0bcc8;
+
+  --btn-primary: #3498db;
+  --btn-primary-hover: #2980b9;
+  --btn-secondary: #e8ecf0;
+  --btn-danger: #e74c3c;
+  --btn-success: #27ae60;
+
+  --chart-grid: #d0d8e0;
+  --chart-axis: #8892a6;
+  --chart-text: #5a6a7a;
+  --chart-point: #3498db;
+
+  --shadow-light: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-medium: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-heavy: 0 8px 16px rgba(0, 0, 0, 0.1);
+  --shadow-dropdown: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+/* Light theme - widget container */
+html.light-theme .yield-water-chart-widget,
+html[data-theme="light"] .yield-water-chart-widget,
+body.light-theme .yield-water-chart-widget {
+  background: #ffffff !important;
+  border-color: #d0d8e0 !important;
+  color: #1a2634 !important;
+}
+
+/* Light theme - header */
+html.light-theme .widget-header,
+html[data-theme="light"] .widget-header,
+body.light-theme .widget-header {
+  background: #f5f7fa !important;
+  border-color: #d0d8e0 !important;
+}
+
+html.light-theme .widget-title,
+html[data-theme="light"] .widget-title,
+body.light-theme .widget-title {
+  color: #1a2634 !important;
+}
+
+/* Light theme - filters */
+html.light-theme .filters-container,
+html[data-theme="light"] .filters-container,
+body.light-theme .filters-container {
+  background: #f5f7fa !important;
+}
+
+html.light-theme .filter-group,
+html[data-theme="light"] .filter-group,
+body.light-theme .filter-group {
+  background: #ffffff !important;
+  border-color: #d0d8e0 !important;
+}
+
+html.light-theme .filter-label,
+html[data-theme="light"] .filter-label,
+body.light-theme .filter-label {
+  color: #5a6a7a !important;
+}
+
+/* Light theme - dropdowns */
+html.light-theme .yield-water-chart-widget .dropdown-button,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-button,
+body.light-theme .yield-water-chart-widget .dropdown-button {
+  background: #ffffff !important;
+  border-color: #d0d8e0 !important;
+  color: #1a2634 !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-button:hover,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-button:hover,
+body.light-theme .yield-water-chart-widget .dropdown-button:hover {
+  background: #f5f7fa !important;
+  border-color: #3498db !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-menu,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-menu,
+body.light-theme .yield-water-chart-widget .dropdown-menu {
+  background: #ffffff !important;
+  border-color: #d0d8e0 !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-item,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-item,
+body.light-theme .yield-water-chart-widget .dropdown-item {
+  background: #ffffff !important;
+  color: #1a2634 !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-item:hover,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-item:hover,
+body.light-theme .yield-water-chart-widget .dropdown-item:hover {
+  background: rgba(52, 152, 219, 0.1) !important;
+  color: #2980b9 !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-item.selected,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-item.selected,
+body.light-theme .yield-water-chart-widget .dropdown-item.selected {
+  background: rgba(52, 152, 219, 0.15) !important;
+  color: #2980b9 !important;
+}
+
+/* Light theme - chart container */
+html.light-theme .chart-container,
+html[data-theme="light"] .chart-container,
+body.light-theme .chart-container {
+  background: #ffffff !important;
+}
+
+html.light-theme .chart-area,
+html[data-theme="light"] .chart-area,
+body.light-theme .chart-area {
+  background: #fafbfc !important;
+}
+
+/* Light theme - chart elements */
+html.light-theme .recharts-cartesian-grid line,
+html[data-theme="light"] .recharts-cartesian-grid line,
+body.light-theme .recharts-cartesian-grid line {
+  stroke: #e0e6ec !important;
+}
+
+html.light-theme .recharts-xAxis .recharts-text,
+html.light-theme .recharts-yAxis .recharts-text,
+html[data-theme="light"] .recharts-xAxis .recharts-text,
+html[data-theme="light"] .recharts-yAxis .recharts-text,
+body.light-theme .recharts-xAxis .recharts-text,
+body.light-theme .recharts-yAxis .recharts-text {
+  fill: #5a6a7a !important;
+}
+
+/* Light theme - status section */
+html.light-theme .selection-status,
+html[data-theme="light"] .selection-status,
+body.light-theme .selection-status {
+  background: #f0f4f8 !important;
+  border-color: #d0d8e0 !important;
+  color: #5a6a7a !important;
+}
+
+/* Light theme - buttons */
+html.light-theme .axis-toggle-btn,
+html[data-theme="light"] .axis-toggle-btn,
+body.light-theme .axis-toggle-btn {
+  background: #e8ecf0 !important;
+  border-color: #d0d8e0 !important;
+  color: #5a6a7a !important;
+}
+
+html.light-theme .axis-toggle-btn:hover,
+html[data-theme="light"] .axis-toggle-btn:hover,
+body.light-theme .axis-toggle-btn:hover {
+  background: #d0d8e0 !important;
+  color: #1a2634 !important;
+}
+
+html.light-theme .axis-toggle-btn.active,
+html[data-theme="light"] .axis-toggle-btn.active,
+body.light-theme .axis-toggle-btn.active {
+  background: #3498db !important;
+  color: #ffffff !important;
+}
+
+/* Light theme - info text */
+html.light-theme .chart-info-text,
+html[data-theme="light"] .chart-info-text,
+body.light-theme .chart-info-text {
+  color: #5a6a7a !important;
+}
+
+/* Light theme - scrollbar */
+html.light-theme .yield-water-chart-widget::-webkit-scrollbar-track,
+html[data-theme="light"] .yield-water-chart-widget::-webkit-scrollbar-track {
+  background: #f0f4f8 !important;
+}
+
+html.light-theme .yield-water-chart-widget::-webkit-scrollbar-thumb,
+html[data-theme="light"] .yield-water-chart-widget::-webkit-scrollbar-thumb {
+  background: #c0c8d0 !important;
+}
+
+html.light-theme .yield-water-chart-widget::-webkit-scrollbar-thumb:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget::-webkit-scrollbar-thumb:hover {
+  background: #a0a8b0 !important;
+}
+
+/* Light theme - tooltip */
+html.light-theme .recharts-tooltip-wrapper .recharts-default-tooltip,
+html[data-theme="light"] .recharts-tooltip-wrapper .recharts-default-tooltip,
+body.light-theme .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #ffffff !important;
+  border-color: #d0d8e0 !important;
+  color: #1a2634 !important;
+}
+
+/* Light theme - selected list table */
+html.light-theme .selected-list-container,
+html[data-theme="light"] .selected-list-container,
+body.light-theme .selected-list-container {
+  background: #f5f7fa !important;
+  border-color: #d0d8e0 !important;
+}
+
+html.light-theme .selected-table th,
+html[data-theme="light"] .selected-table th,
+body.light-theme .selected-table th {
+  background: #e8ecf0 !important;
+  color: #1a2634 !important;
+  border-color: #d0d8e0 !important;
+}
+
+html.light-theme .selected-table td,
+html[data-theme="light"] .selected-table td,
+body.light-theme .selected-table td {
+  background: #ffffff !important;
+  color: #1a2634 !important;
+  border-color: #e0e6ec !important;
+}
+
+html.light-theme .selected-table tr:hover td,
+html[data-theme="light"] .selected-table tr:hover td,
+body.light-theme .selected-table tr:hover td {
+  background: #f0f4f8 !important;
+}
+
+/* Light theme - dropdown text and chevron */
+html.light-theme .dropdown-button-text,
+html[data-theme="light"] .dropdown-button-text,
+body.light-theme .dropdown-button-text {
+  color: #1a2634 !important;
+}
+
+html.light-theme .dropdown-chevron,
+html[data-theme="light"] .dropdown-chevron,
+body.light-theme .dropdown-chevron {
+  color: #7f8c8d !important;
+}
+
+/* Light theme - filter select styling */
+html.light-theme .filter-select,
+html[data-theme="light"] .filter-select,
+body.light-theme .filter-select {
+  background: #ffffff !important;
+  border-color: #c8d0d8 !important;
+  color: #1a2634 !important;
+}
+
+html.light-theme .filter-select:hover,
+html[data-theme="light"] .filter-select:hover,
+body.light-theme .filter-select:hover {
+  border-color: #3498db !important;
+  background: #f8fafc !important;
+}
+
+html.light-theme .filter-select:focus,
+html[data-theme="light"] .filter-select:focus,
+body.light-theme .filter-select:focus {
+  border-color: #3498db !important;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2) !important;
+}
+
+/* Light theme - dropdown item borders */
+html.light-theme .yield-water-chart-widget .dropdown-item,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-item,
+body.light-theme .yield-water-chart-widget .dropdown-item {
+  background: #ffffff !important;
+  color: #1a2634 !important;
+  border-bottom: 1px solid #e8ecf0 !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-item:last-child,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-item:last-child,
+body.light-theme .yield-water-chart-widget .dropdown-item:last-child {
+  border-bottom: none !important;
+}
+
+html.light-theme .yield-water-chart-widget .dropdown-item.selected,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-item.selected,
+body.light-theme .yield-water-chart-widget .dropdown-item.selected {
+  background: rgba(52, 152, 219, 0.12) !important;
+  color: #2980b9 !important;
+  border-left: 3px solid #3498db !important;
+}
+
+/* Light theme - dropdown menu border */
+html.light-theme .yield-water-chart-widget .dropdown-menu,
+html[data-theme="light"] .yield-water-chart-widget .dropdown-menu,
+body.light-theme .yield-water-chart-widget .dropdown-menu {
+  background: #ffffff !important;
+  border: 1px solid #c8d0d8 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Light theme - filter group styling */
+html.light-theme .filter-group,
+html[data-theme="light"] .filter-group,
+body.light-theme .filter-group {
+  background: #ffffff !important;
+  border: 1px solid #d8e0e8 !important;
+  border-radius: 6px !important;
+}
+
+/* Light theme - group by dropdown */
+html.light-theme .group-by-dropdown .dropdown-button,
+html[data-theme="light"] .group-by-dropdown .dropdown-button,
+body.light-theme .group-by-dropdown .dropdown-button {
+  background: #f0f4f8 !important;
+  border-color: #c8d0d8 !important;
+  color: #1a2634 !important;
+}
+
+html.light-theme .group-by-dropdown .dropdown-button:hover,
+html[data-theme="light"] .group-by-dropdown .dropdown-button:hover,
+body.light-theme .group-by-dropdown .dropdown-button:hover {
+  background: #e8ecf0 !important;
+  border-color: #3498db !important;
+}
+
+/* Light theme - axis dropdowns */
+html.light-theme .axis-dropdown .dropdown-button,
+html[data-theme="light"] .axis-dropdown .dropdown-button,
+body.light-theme .axis-dropdown .dropdown-button {
+  background: #e8ecf0 !important;
+  border-color: #c8d0d8 !important;
+  color: #1a2634 !important;
+}
+
+html.light-theme .axis-dropdown .dropdown-menu,
+html[data-theme="light"] .axis-dropdown .dropdown-menu,
+body.light-theme .axis-dropdown .dropdown-menu {
+  background: #ffffff !important;
+  border: 1px solid #c8d0d8 !important;
+}
+
+/* Light theme - checkmark in dropdown */
+html.light-theme .dropdown-checkmark,
+html[data-theme="light"] .dropdown-checkmark,
+body.light-theme .dropdown-checkmark {
+  color: #2980b9 !important;
+}
+
+/* Light theme - borders visibility fix */
+html.light-theme .filters-container,
+html[data-theme="light"] .filters-container,
+body.light-theme .filters-container {
+  background: #f5f7fa !important;
+  border-bottom: 1px solid #d8e0e8 !important;
+}
+
+html.light-theme .widget-header,
+html[data-theme="light"] .widget-header,
+body.light-theme .widget-header {
+  background: #f5f7fa !important;
+  border-bottom: 1px solid #d8e0e8 !important;
+}
+
+/* Light theme - chart wrapper */
+html.light-theme .chart-wrapper,
+html[data-theme="light"] .chart-wrapper,
+body.light-theme .chart-wrapper {
+  background: #ffffff !important;
+  border: 1px solid #e0e6ec !important;
+}
+
+/* Light theme - all text elements */
+html.light-theme .yield-water-chart-widget *,
+html[data-theme="light"] .yield-water-chart-widget * {
+  --text-primary: #1a2634;
+  --text-secondary: #5a6a7a;
+}
+
+/* =====================================================
+   LIGHT THEME - TOOLTIP & POPUPS
+   ===================================================== */
+
+/* Light theme - custom tooltip (bin hover) */
+html.light-theme .custom-tooltip,
+html[data-theme="light"] .custom-tooltip,
+body.light-theme .custom-tooltip {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  color: #1a2634 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light-theme .custom-tooltip .tooltip-title,
+html[data-theme="light"] .custom-tooltip .tooltip-title,
+body.light-theme .custom-tooltip .tooltip-title {
+  color: #1a2634 !important;
+  border-bottom-color: #e0e6ec !important;
+}
+
+html.light-theme .custom-tooltip .tooltip-row,
+html[data-theme="light"] .custom-tooltip .tooltip-row,
+body.light-theme .custom-tooltip .tooltip-row {
+  color: #3a4a5c !important;
+}
+
+html.light-theme .custom-tooltip .tooltip-label,
+html[data-theme="light"] .custom-tooltip .tooltip-label,
+body.light-theme .custom-tooltip .tooltip-label {
+  color: #5a6a7a !important;
+}
+
+html.light-theme .custom-tooltip .tooltip-value,
+html[data-theme="light"] .custom-tooltip .tooltip-value,
+body.light-theme .custom-tooltip .tooltip-value {
+  color: #2980b9 !important;
+}
+
+/* Light theme - axis selector popup (Y/X metrics) */
+html.light-theme .axis-selector-popup,
+html[data-theme="light"] .axis-selector-popup,
+body.light-theme .axis-selector-popup {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  color: #1a2634 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+html.light-theme .axis-selector-popup .popup-header,
+html[data-theme="light"] .axis-selector-popup .popup-header,
+body.light-theme .axis-selector-popup .popup-header {
+  background: #f5f7fa !important;
+  color: #1a2634 !important;
+  border-bottom: 1px solid #e0e6ec !important;
+}
+
+html.light-theme .axis-selector-popup .popup-title,
+html[data-theme="light"] .axis-selector-popup .popup-title,
+body.light-theme .axis-selector-popup .popup-title {
+  color: #1a2634 !important;
+}
+
+html.light-theme .axis-selector-popup .metric-item,
+html[data-theme="light"] .axis-selector-popup .metric-item,
+body.light-theme .axis-selector-popup .metric-item {
+  background: #ffffff !important;
+  color: #3a4a5c !important;
+  border-bottom: 1px solid #e8ecf0 !important;
+}
+
+html.light-theme .axis-selector-popup .metric-item:hover,
+html[data-theme="light"] .axis-selector-popup .metric-item:hover,
+body.light-theme .axis-selector-popup .metric-item:hover {
+  background: #f0f4f8 !important;
+  color: #2980b9 !important;
+}
+
+html.light-theme .axis-selector-popup .metric-item.selected,
+html[data-theme="light"] .axis-selector-popup .metric-item.selected,
+body.light-theme .axis-selector-popup .metric-item.selected {
+  background: rgba(52, 152, 219, 0.1) !important;
+  color: #2980b9 !important;
+}
+
+html.light-theme .axis-selector-popup .metric-name,
+html[data-theme="light"] .axis-selector-popup .metric-name,
+body.light-theme .axis-selector-popup .metric-name {
+  color: #1a2634 !important;
+}
+
+html.light-theme .axis-selector-popup .metric-code,
+html[data-theme="light"] .axis-selector-popup .metric-code,
+body.light-theme .axis-selector-popup .metric-code {
+  color: #7f8c8d !important;
+}
+
+/* Light theme - year/filter select dropdown items */
+html.light-theme .select-dropdown,
+html[data-theme="light"] .select-dropdown,
+body.light-theme .select-dropdown {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light-theme .select-item,
+html[data-theme="light"] .select-item,
+body.light-theme .select-item {
+  background: #ffffff !important;
+  color: #1a2634 !important;
+  border-bottom: 1px solid #e8ecf0 !important;
+}
+
+html.light-theme .select-item:hover,
+html[data-theme="light"] .select-item:hover,
+body.light-theme .select-item:hover {
+  background: #f0f4f8 !important;
+  color: #2980b9 !important;
+}
+
+html.light-theme .select-item.active,
+html.light-theme .select-item.selected,
+html[data-theme="light"] .select-item.active,
+html[data-theme="light"] .select-item.selected,
+body.light-theme .select-item.active,
+body.light-theme .select-item.selected {
+  background: rgba(52, 152, 219, 0.12) !important;
+  color: #2980b9 !important;
+}
+
+/* Light theme - filter dropdown header */
+html.light-theme .filter-dropdown-header,
+html[data-theme="light"] .filter-dropdown-header,
+body.light-theme .filter-dropdown-header {
+  background: #f5f7fa !important;
+  color: #5a6a7a !important;
+  border-bottom: 1px solid #e0e6ec !important;
+}
+
+/* Light theme - generic popups and modals */
+html.light-theme .popup,
+html.light-theme .modal,
+html.light-theme .overlay-panel,
+html[data-theme="light"] .popup,
+html[data-theme="light"] .modal,
+html[data-theme="light"] .overlay-panel,
+body.light-theme .popup,
+body.light-theme .modal,
+body.light-theme .overlay-panel {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  color: #1a2634 !important;
+}
+
+/* Light theme - any div with dark background class */
+html.light-theme [class*="bg-dark"],
+html.light-theme [class*="dark-bg"],
+html[data-theme="light"] [class*="bg-dark"],
+html[data-theme="light"] [class*="dark-bg"] {
+  background: #ffffff !important;
+  color: #1a2634 !important;
+}
+
+/* Light theme - recharts tooltip */
+html.light-theme .recharts-tooltip-wrapper,
+html[data-theme="light"] .recharts-tooltip-wrapper {
+  filter: none !important;
+}
+
+html.light-theme .recharts-tooltip-wrapper > div,
+html[data-theme="light"] .recharts-tooltip-wrapper > div {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  color: #1a2634 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Light theme - lock icon in axis popup */
+html.light-theme .lock-icon,
+html[data-theme="light"] .lock-icon,
+body.light-theme .lock-icon {
+  color: #bdc3c7 !important;
+}
+
+/* Light theme - axis button labels */
+html.light-theme .axis-btn-label,
+html.light-theme .axis-label,
+html[data-theme="light"] .axis-btn-label,
+html[data-theme="light"] .axis-label,
+body.light-theme .axis-btn-label,
+body.light-theme .axis-label {
+  color: #1a2634 !important;
+}
+
+/* =====================================================
+   LIGHT THEME - AXIS MENU (Change X / Change Y popup)
+   ===================================================== */
+html.light-theme .axis-menu,
+html[data-theme="light"] .axis-menu,
+body.light-theme .axis-menu {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light-theme .axis-menu-head,
+html[data-theme="light"] .axis-menu-head,
+body.light-theme .axis-menu-head {
+  background: #f5f7fa !important;
+  border-bottom: 1px solid #e0e6ec !important;
+}
+
+html.light-theme .axis-menu-title,
+html[data-theme="light"] .axis-menu-title,
+body.light-theme .axis-menu-title {
+  color: #1a2634 !important;
+}
+
+html.light-theme .axis-menu-list,
+html[data-theme="light"] .axis-menu-list,
+body.light-theme .axis-menu-list {
+  background: #ffffff !important;
+}
+
+html.light-theme .axis-menu-item,
+html[data-theme="light"] .axis-menu-item,
+body.light-theme .axis-menu-item {
+  background: #ffffff !important;
+  color: #3a4a5c !important;
+  border-bottom: 1px solid #e8ecf0 !important;
+}
+
+html.light-theme .axis-menu-item:hover:not(.disabled),
+html[data-theme="light"] .axis-menu-item:hover:not(.disabled),
+body.light-theme .axis-menu-item:hover:not(.disabled) {
+  background: #f0f4f8 !important;
+  color: #2980b9 !important;
+}
+
+html.light-theme .axis-menu-item.active,
+html[data-theme="light"] .axis-menu-item.active,
+body.light-theme .axis-menu-item.active {
+  background: rgba(52, 152, 219, 0.12) !important;
+  color: #2980b9 !important;
+  border-left: 3px solid #3498db !important;
+}
+
+html.light-theme .axis-menu-item.disabled,
+html[data-theme="light"] .axis-menu-item.disabled,
+body.light-theme .axis-menu-item.disabled {
+  color: #bdc3c7 !important;
+  background: #f8f9fa !important;
+}
+
+/* Light theme - metric name and code in axis menu */
+html.light-theme .axis-menu-item .metric-name,
+html.light-theme .axis-menu-item .item-label,
+html[data-theme="light"] .axis-menu-item .metric-name,
+html[data-theme="light"] .axis-menu-item .item-label,
+body.light-theme .axis-menu-item .metric-name,
+body.light-theme .axis-menu-item .item-label {
+  color: #1a2634 !important;
+}
+
+html.light-theme .axis-menu-item .metric-code,
+html.light-theme .axis-menu-item .item-code,
+html[data-theme="light"] .axis-menu-item .metric-code,
+html[data-theme="light"] .axis-menu-item .item-code,
+body.light-theme .axis-menu-item .metric-code,
+body.light-theme .axis-menu-item .item-code {
+  color: #7f8c8d !important;
+}
+
+/* Light theme - checkmark in axis menu */
+html.light-theme .axis-menu-item .checkmark,
+html.light-theme .axis-menu-item svg,
+html[data-theme="light"] .axis-menu-item .checkmark,
+html[data-theme="light"] .axis-menu-item svg,
+body.light-theme .axis-menu-item .checkmark,
+body.light-theme .axis-menu-item svg {
+  color: #2980b9 !important;
+}
+
+/* Light theme - lock icon */
+html.light-theme .axis-menu-item .lock,
+html[data-theme="light"] .axis-menu-item .lock,
+body.light-theme .axis-menu-item .lock {
+  color: #bdc3c7 !important;
+}
+
+/* ===================================================
+   Light theme - Selected polygons list (jadval)
+   =================================================== */
+
+/* Selected list container */
+html.light-theme .selected-list,
+html[data-theme="light"] .selected-list,
+body.light-theme .selected-list {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Selected list header */
+html.light-theme .selected-list-head,
+html[data-theme="light"] .selected-list-head,
+body.light-theme .selected-list-head {
+  background: #f5f7fa !important;
+  border-bottom: 1px solid #d0d8e0 !important;
+}
+
+html.light-theme .selected-list-title,
+html[data-theme="light"] .selected-list-title,
+body.light-theme .selected-list-title {
+  color: #1a2634 !important;
+}
+
+/* ===================================================
+   ProductivityComparisonV14 - Keep top filters in one row
+   =================================================== */
+.yield-water-chart-widget.evapo-v30-style .filters-container {
+  flex-wrap: nowrap !important;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+
+.yield-water-chart-widget.evapo-v30-style .filters-container .filter-dropdown {
+  flex: 1 1 0;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .filters-container
+  .filter-dropdown
+  .dropdown-button {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .yield-water-chart-widget.evapo-v30-style .filters-container {
+    flex-wrap: nowrap !important;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .yield-water-chart-widget.evapo-v30-style
+    .filters-container
+    .filter-dropdown {
+    flex: 1 1 0;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .yield-water-chart-widget.evapo-v30-style .filters-container {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 4px;
+  }
+
+  .yield-water-chart-widget.evapo-v30-style
+    .filters-container
+    .filter-dropdown {
+    flex: 1 1 0;
+    min-width: 0 !important;
+    width: auto;
+  }
+}
+
+html.light-theme .selected-list-sub,
+html[data-theme="light"] .selected-list-sub,
+body.light-theme .selected-list-sub {
+  color: #5a6a7a !important;
+}
+
+/* Selected list scroll area */
+html.light-theme .selected-list-scroll,
+html[data-theme="light"] .selected-list-scroll,
+body.light-theme .selected-list-scroll {
+  background: #ffffff !important;
+}
+
+/* Selected row - each polygon item */
+html.light-theme .selected-row,
+html[data-theme="light"] .selected-row,
+body.light-theme .selected-row {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e0e6ec !important;
+}
+
+html.light-theme .selected-row:hover,
+html[data-theme="light"] .selected-row:hover,
+body.light-theme .selected-row:hover {
+  background: #f5f7fa !important;
+}
+
+html.light-theme .selected-row:last-child,
+html[data-theme="light"] .selected-row:last-child,
+body.light-theme .selected-row:last-child {
+  border-bottom: none !important;
+}
+
+/* Polygon name */
+html.light-theme .selected-row-name,
+html[data-theme="light"] .selected-row-name,
+body.light-theme .selected-row-name {
+  color: #1a2634 !important;
+}
+
+/* Polygon ID */
+html.light-theme .selected-row-id,
+html[data-theme="light"] .selected-row-id,
+body.light-theme .selected-row-id {
+  color: #6a7a8a !important;
+}
+
+/* Metrics section */
+html.light-theme .selected-row-metrics,
+html[data-theme="light"] .selected-row-metrics,
+body.light-theme .selected-row-metrics {
+  color: #3a4a5c !important;
+}
+
+html.light-theme .selected-row-metrics .k,
+html[data-theme="light"] .selected-row-metrics .k,
+body.light-theme .selected-row-metrics .k {
+  color: #6a7a8a !important;
+}
+
+html.light-theme .selected-row-metrics .v,
+html[data-theme="light"] .selected-row-metrics .v,
+body.light-theme .selected-row-metrics .v {
+  color: #1a2634 !important;
+  font-weight: 700 !important;
+}
+
+/* ===================================================
+   Light theme - Axis label buttons (Change X/Y)
+   =================================================== */
+
+/* Axis label button */
+html.light-theme .axis-label-btn,
+html[data-theme="light"] .axis-label-btn,
+body.light-theme .axis-label-btn {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.95),
+    rgba(240, 244, 248, 0.9)
+  ) !important;
+  border: 1px solid #c8d0d8 !important;
+  color: #1a2634 !important;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+html.light-theme .axis-label-btn:hover,
+html[data-theme="light"] .axis-label-btn:hover,
+body.light-theme .axis-label-btn:hover {
+  border-color: #3498db !important;
+  background: linear-gradient(
+    180deg,
+    rgba(52, 152, 219, 0.1),
+    rgba(255, 255, 255, 0.95)
+  ) !important;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    0 0 0 2px rgba(52, 152, 219, 0.15) !important;
+}
+
+html.light-theme .axis-label-btn.open,
+html[data-theme="light"] .axis-label-btn.open,
+body.light-theme .axis-label-btn.open {
+  border-color: #3498db !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    0 0 0 2px rgba(52, 152, 219, 0.25) !important;
+}
+
+/* Axis prefix (X/Y badge) */
+html.light-theme .axis-prefix,
+html[data-theme="light"] .axis-prefix,
+body.light-theme .axis-prefix {
+  background: rgba(52, 152, 219, 0.15) !important;
+  border: 1px solid rgba(52, 152, 219, 0.3) !important;
+  color: #2980b9 !important;
+}
+
+/* Axis label text */
+html.light-theme .axis-label-text,
+html[data-theme="light"] .axis-label-text,
+body.light-theme .axis-label-text {
+  color: #1a2634 !important;
+}
+
+/* Axis chevron */
+html.light-theme .axis-chevron,
+html[data-theme="light"] .axis-chevron,
+body.light-theme .axis-chevron {
+  color: #6a7a8a !important;
+}
+/* ===================================================
+   Light theme - Selected Polygons Panel & Table
+   =================================================== */
+
+html.light-theme .selected-polygons-panel,
+html[data-theme="light"] .selected-polygons-panel,
+body.light-theme .selected-polygons-panel {
+  background: #ffffff !important;
+  border: 1px solid #d0d8e0 !important;
+}
+
+html.light-theme .indicator-card,
+html[data-theme="light"] .indicator-card,
+body.light-theme .indicator-card {
+  background: #f5f7fa !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light-theme .selected-table-container,
+html[data-theme="light"] .selected-table-container,
+body.light-theme .selected-table-container {
+  border-color: #d0d8e0 !important;
+}
+
+html.light-theme .selected-polygons-table thead tr,
+html[data-theme="light"] .selected-polygons-table thead tr,
+body.light-theme .selected-polygons-table thead tr {
+  background: #f0f4f8 !important;
+}
+
+html.light-theme .selected-polygons-table th,
+html[data-theme="light"] .selected-polygons-table th,
+body.light-theme .selected-polygons-table th {
+  color: #1a2634 !important;
+}
+
+html.light-theme .selected-polygons-table td,
+html[data-theme="light"] .selected-polygons-table td,
+body.light-theme .selected-polygons-table td {
+  border-bottom-color: #e8ecf0 !important;
+}
+
+html.light-theme .selected-polygons-table tbody tr:hover,
+html[data-theme="light"] .selected-polygons-table tbody tr:hover,
+body.light-theme .selected-polygons-table tbody tr:hover {
+  background: rgba(52, 152, 219, 0.08) !important;
+}
+
+/* ===================================================
+   RESPONSIVE - Indikatorlar va Bin katakchalari
+   =================================================== */
+
+/* Indikatorlar - responsive */
+.indicators-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  justify-content: space-between !important;
+  align-items: stretch !important;
+  margin: 6px 0 !important;
+}
+
+.indicators-row .indicator-card {
+  flex: 1 1 calc(33.333% - 4px) !important;
+  min-width: 0 !important;
+  min-height: 58px !important;
+  padding: 5px 5px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  row-gap: 6px !important;
+}
+
+.indicators-row .indicator-card > div:first-child {
+  font-size: 12px !important;
+  margin: 0 !important;
+  margin-bottom: 0px !important;
+  line-height: 1.1 !important;
+}
+
+.indicators-row .indicator-card > div:nth-child(2) {
+  font-size: 16px !important;
+  line-height: 1.15 !important;
+  margin: 0 !important;
+  margin-bottom: 0px !important;
+}
+
+.indicators-row .indicator-card > div:last-child {
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+/* Planshet uchun indikatorlar - 2 qatorga */
+@media (max-width: 900px) {
+  .indicators-row {
+    gap: 6px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 calc(50% - 3px) !important;
+    min-height: 54px !important;
+    padding: 4px 4px !important;
+    row-gap: 5px !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 12px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 16px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:last-child {
+    font-size: 8px !important;
+  }
+}
+
+/* Kichik planshet - 2 qatorda */
+@media (max-width: 768px) {
+  .indicators-row {
+    gap: 5px !important;
+    margin-bottom: 5px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 calc(50% - 2.5px) !important;
+    min-height: 50px !important;
+    padding: 3px 3px !important;
+    row-gap: 4px !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 12px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 16px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:last-child {
+    font-size: 7px !important;
+  }
+}
+
+/* Juda kichik ekran - 1 qatorga stacked */
+@media (max-width: 600px) {
+  .indicators-row {
+    flex-direction: column !important;
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 100% !important;
+    min-height: 46px !important;
+    padding: 3px 3px !important;
+    row-gap: 4px !important;
+    border-left-width: 2px !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 12px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 16px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:last-child {
+    font-size: 7px !important;
+  }
+}
+
+/* Minimal ekran - vertikal stacked */
+@media (max-width: 400px) {
+  .indicators-row {
+    flex-direction: column !important;
+    gap: 3px !important;
+    margin-bottom: 3px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 100% !important;
+    min-height: 43px !important;
+    padding: 2px 3px !important;
+    row-gap: 3px !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 12px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 16px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .indicators-row .indicator-card > div:last-child {
+    font-size: 6px !important;
+  }
+}
+
+/* ===================================================
+   RESPONSIVE - Chart Stage (Bin katakchalari)
+   =================================================== */
+
+/* Standart o'lcham */
+.chart-stage {
+  min-height: 350px !important;
+  height: auto !important;
+}
+
+/* Katta planshet */
+@media (max-width: 1200px) {
+  .chart-stage {
+    min-height: 340px !important;
+  }
+}
+
+/* Planshet */
+@media (max-width: 1024px) {
+  .chart-stage {
+    min-height: 320px !important;
+  }
+}
+
+/* O'rta planshet */
+@media (max-width: 900px) {
+  .chart-stage {
+    min-height: 300px !important;
+  }
+}
+
+/* Kichik planshet */
+@media (max-width: 768px) {
+  .chart-stage {
+    min-height: 270px !important;
+  }
+}
+
+/* Telefon - landscape */
+@media (max-width: 600px) {
+  .chart-stage {
+    min-height: 240px !important;
+  }
+}
+
+/* Telefon - portrait */
+@media (max-width: 480px) {
+  .chart-stage {
+    min-height: 200px !important;
+  }
+}
+
+/* Juda kichik telefon */
+@media (max-width: 400px) {
+  .chart-stage {
+    min-height: 180px !important;
+  }
+}
+
+/* ===================================================
+   TABLET RESPONSIVE - Barcha elementlar uchun
+   =================================================== */
+
+/* Tablet (768px-1024px) */
+@media (max-width: 1024px) {
+  /* Widget container - flexbox layout with scroll */
+  .yield-water-chart-widget {
+    min-height: 350px !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important; /* Widget scroll bo'ladi */
+    overflow-x: hidden !important;
+  }
+
+  /* Header kichikroq */
+  .widget-header {
+    padding: 10px 12px !important;
+    min-height: 44px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .widget-title {
+    font-size: 13px !important;
+  }
+
+  /* Filters - yonma-yon siqilgan */
+  .filters-container {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    min-height: auto !important;
+    flex-shrink: 0 !important;
+    flex-wrap: wrap !important;
+  }
+
+  .simple-dropdown {
+    min-width: 80px !important;
+    max-width: none !important;
+    flex: 1 1 auto !important;
+  }
+
+  .dropdown-button {
+    padding: 6px 24px 6px 8px !important;
+    font-size: 11px !important;
+    height: 30px !important;
+  }
+
+  /* Filter Info */
+  .filter-info-bar {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .filter-info-bar span {
+    font-size: 10px !important;
+  }
+
+  /* Chart container - flex layout, no overflow hidden */
+  .chart-container {
+    flex: 0 0 auto !important; /* Fixed height, scroll on widget */
+    min-height: 0 !important;
+    padding: 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: visible !important;
+  }
+
+  .chart-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Chart title */
+  .chart-title {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Axis o'qlari */
+  .axis-container {
+    padding: 6px 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .axis-btn {
+    font-size: 10px !important;
+    padding: 4px 8px !important;
+  }
+
+  /* Chart stage - binlar - flex to fill available space */
+  .chart-stage {
+    padding: 6px !important;
+    flex: 1 !important;
+    min-height: 180px !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Tooltip */
+  .chart-tooltip {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+  }
+}
+
+/* Tablet kichik (600px-768px) */
+@media (max-width: 768px) {
+  .widget-header {
+    padding: 8px 10px !important;
+    min-height: 40px !important;
+  }
+
+  .widget-title {
+    font-size: 12px !important;
+  }
+
+  .filters-container {
+    padding: 6px 8px !important;
+    gap: 4px !important;
+  }
+
+  .simple-dropdown {
+    min-width: 70px !important;
+  }
+
+  .dropdown-button {
+    padding: 5px 20px 5px 6px !important;
+    font-size: 10px !important;
+    height: 28px !important;
+  }
+
+  .dropdown-button::after {
+    right: 6px !important;
+    font-size: 8px !important;
+  }
+
+  .axis-btn {
+    font-size: 9px !important;
+    padding: 3px 6px !important;
+  }
+
+  .chart-stage {
+    padding: 6px !important;
+  }
+}
+
+/* ===================================================
+   TABLET - Selected List Panel (Indicators + Table)
+   FIXED HEIGHT - ustma-ust bo'lmaydi
+   =================================================== */
+
+@media (max-width: 1024px) {
+  .selected-list-panel {
+    padding: 0 6px 6px 6px !important;
+    margin-top: 0 !important;
+    flex: 0 0 auto !important; /* FIXED - kengaymaydi */
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+  }
+
+  .selected-list-panel h4 {
+    font-size: 11px !important;
+    margin-bottom: 6px !important;
+    padding-bottom: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Indicators row - tepada fixed */
+  .indicators-row {
+    gap: 4px !important;
+    margin-bottom: 6px !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .indicators-row .indicator-card {
+    padding: 3px 4px !important;
+    border-radius: 4px !important;
+    border-left-width: 2px !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 8px !important;
+    margin-bottom: 1px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 14px !important;
+  }
+
+  .indicators-row .indicator-card > div:last-child {
+    font-size: 7px !important;
+  }
+
+  /* Table container - FAQAT 4 TA QATOR */
+  .selected-table-container {
+    flex: 0 0 auto !important;
+    height: 120px !important; /* 4 ta qator uchun */
+    max-height: 120px !important;
+    border-radius: 4px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .selected-polygons-table {
+    font-size: 10px !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .selected-polygons-table th,
+  .selected-polygons-table td {
+    padding: 4px 5px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .selected-polygons-table th button {
+    font-size: 8px !important;
+    padding: 3px 5px !important;
+  }
+
+  .selected-polygons-table td:first-child {
+    max-width: 100px !important;
+    word-break: break-word !important;
+  }
+}
+
+/* 768px - Mobil uchun */
+@media (max-width: 768px) {
+  .selected-list-panel {
+    padding: 0 4px 4px 4px !important;
+    flex: 0 0 auto !important; /* FIXED - kengaymaydi */
+    overflow: visible !important;
+    margin-top: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+  }
+
+  .selected-list-panel h4 {
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .indicators-row {
+    gap: 3px !important;
+    margin-bottom: 4px !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .indicators-row .indicator-card {
+    padding: 2px 3px !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    border-radius: 3px !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 7px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 12px !important;
+  }
+
+  .indicators-row .indicator-card > div:last-child {
+    font-size: 6px !important;
+  }
+
+  .selected-table-container {
+    flex: 0 0 auto !important;
+    height: 100px !important; /* 4 ta qator uchun */
+    max-height: 100px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .selected-polygons-table {
+    font-size: 8px !important;
+  }
+
+  .selected-polygons-table th,
+  .selected-polygons-table td {
+    padding: 3px 4px !important;
+  }
+  .selected-polygons-table th button {
+    font-size: 9px !important;
+    padding: 2px 3px !important;
+  }
+
+  .selected-polygons-table td:first-child {
+    max-width: 80px !important;
+  }
+}
+
+/* ===================================================
+   MINI EKRAN - 600px dan kichik
+   =================================================== */
+
+@media (max-width: 600px) {
+  .yield-water-chart-widget {
+    min-height: 300px !important;
+    border-radius: 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .widget-header {
+    padding: 6px 8px !important;
+    min-height: 36px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .widget-title {
+    font-size: 11px !important;
+  }
+
+  .filters-container {
+    padding: 5px 6px !important;
+    gap: 3px !important;
+    flex-shrink: 0 !important;
+    flex-wrap: wrap !important;
+  }
+
+  .simple-dropdown {
+    min-width: 60px !important;
+  }
+
+  .dropdown-button {
+    padding: 4px 18px 4px 5px !important;
+    font-size: 9px !important;
+    height: 26px !important;
+  }
+
+  .chart-container {
+    flex: 1 !important;
+    min-height: 0 !important;
+    padding: 6px !important;
+  }
+
+  .chart-stage {
+    padding: 4px !important;
+    min-height: 180px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .selected-list-panel {
+    padding: 0 6px 6px 6px !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .indicators-row {
+    flex-wrap: wrap !important;
+  }
+
+  .indicators-row .indicator-card {
+    min-width: 50px !important;
+    flex: 1 1 auto !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 12px !important;
+  }
+
+  .selected-table-container {
+    flex: 1 !important;
+    min-height: 50px !important;
+    max-height: none !important;
+  }
+
+  .selected-polygons-table {
+    font-size: 8px !important;
+  }
+
+  .selected-polygons-table th button {
+    font-size: 9px !important;
+  }
+}
+
+/* ===================================================
+   CONTAINER QUERIES - Widget kengligiga qarab moslashish
+   =================================================== */
+
+/* Widget 600px dan kichik bo'lganda */
+@container widget (max-width: 600px) {
+  .filters-container {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    padding: 6px 8px !important;
+  }
+
+  .simple-dropdown {
+    min-width: 80px !important;
+    flex: 1 1 45% !important;
+  }
+
+  .chart-stage {
+    height: 220px !important;
+  }
+
+  .indicators-row {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 30% !important;
+    min-width: 60px !important;
+    padding: 5px 4px !important;
+  }
+
+  .indicators-row .indicator-card > div:first-child {
+    font-size: 8px !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 13px !important;
+  }
+
+  .selected-table-container {
+    flex: 1 !important;
+    min-height: 60px !important;
+    max-height: none !important;
+  }
+}
+
+/* Widget 450px dan kichik bo'lganda */
+@container widget (max-width: 450px) {
+  .widget-header {
+    padding: 6px 8px !important;
+  }
+
+  .widget-title {
+    font-size: 11px !important;
+  }
+
+  .filters-container {
+    gap: 3px !important;
+    padding: 4px 6px !important;
+  }
+
+  .simple-dropdown {
+    flex: 1 1 48% !important;
+  }
+
+  .dropdown-button {
+    font-size: 9px !important;
+    height: 26px !important;
+    padding: 4px 20px 4px 6px !important;
+  }
+
+  .chart-stage {
+    height: 180px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 48% !important;
+  }
+
+  .indicators-row .indicator-card > div:nth-child(2) {
+    font-size: 11px !important;
+  }
+}
+
+/* Widget 350px dan kichik bo'lganda */
+@container widget (max-width: 350px) {
+  .chart-stage {
+    height: 150px !important;
+  }
+
+  .indicators-row .indicator-card {
+    flex: 1 1 100% !important;
+    padding: 4px !important;
+  }
+
+  .selected-polygons-table th button {
+    font-size: 9px !important;
+    padding: 2px 3px !important;
+  }
+}
+
+/* Recharts SVG elements z-index */
+.recharts-wrapper {
+  z-index: 1 !important;
+}
+
+.recharts-surface {
+  position: relative;
+  z-index: 1 !important;
+}
+
+/* Prevent browser focus ring (white border) on chart click */
+.yield-water-chart-widget .recharts-surface:focus,
+.yield-water-chart-widget .recharts-surface:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.yield-water-chart-widget .recharts-wrapper:focus,
+.yield-water-chart-widget .recharts-wrapper:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Reference lines on TOP of everything */
+.recharts-reference-lines-group {
+  z-index: 9999 !important;
+  position: relative;
+}
+
+.recharts-reference-line {
+  pointer-events: none;
+  position: relative;
+  z-index: 9999 !important;
+}
+/* ===================================================
+   RESPONSIVE FONT SCALING - Fluid Dynamic Scaling
+   Avtomatik moslashuvchan, normal holatda normal o'lcham
+   =================================================== */
+
+/* BASE - Default normal sizes (original) - KICHIKROQ */
+.selected-polygons-table th button {
+  font-size: 9px !important;
+  padding: 3px 4px !important;
+}
+
+.selected-polygons-table th {
+  padding: 3px 4px !important;
+  font-size: 10px !important;
+}
+
+.selected-polygons-table tbody tr {
+  height: 26px !important;
+}
+
+.selected-polygons-table td {
+  padding: 3px 4px !important;
+}
+
+/* Container queries - widget size bo'yicha dynamic scaling */
+@container widget (min-width: 800px) {
+  .selected-polygons-table th button {
+    font-size: clamp(9px, 1.1cqw, 11px) !important;
+    padding: clamp(3px, 0.5cqw, 4px) clamp(4px, 0.7cqw, 6px) !important;
+  }
+
+  .selected-polygons-table th {
+    padding: clamp(3px, 0.5cqw, 4px) clamp(4px, 0.7cqw, 6px) !important;
+    font-size: clamp(10px, 1.2cqw, 12px) !important;
+  }
+
+  .selected-polygons-table tbody tr {
+    height: 32px !important;
+  }
+
+  .selected-polygons-table td {
+    padding: clamp(3px, 0.5cqw, 4px) clamp(4px, 0.7cqw, 6px) !important;
+  }
+}
+
+/* Large monitors - moderate scaling (1400px+) */
+@media (min-width: 1400px) {
+  .selected-polygons-table th button {
+    font-size: clamp(9px, 1vw, 11px) !important;
+    padding: clamp(3px, 0.5vw, 4px) clamp(4px, 0.7vw, 6px) !important;
+  }
+
+  .selected-polygons-table th {
+    padding: clamp(3px, 0.5vw, 4px) clamp(4px, 0.7vw, 6px) !important;
+    font-size: clamp(10px, 1.1vw, 12px) !important;
+  }
+
+  .selected-polygons-table tbody tr {
+    height: 32px !important;
+  }
+
+  .selected-polygons-table td {
+    padding: clamp(3px, 0.5vw, 4px) clamp(4px, 0.7vw, 6px) !important;
+  }
+
+  /* Grouped tables - fermer bilan bir xil responsive scaling */
+  .grouped-data-table table {
+    font-size: clamp(9px, 1vw, 11px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.5vw, 4px) clamp(4px, 0.7vw, 6px) !important;
+    font-size: clamp(9px, 1vw, 11px) !important;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.5vw, 4px) clamp(4px, 0.7vw, 6px) !important;
+    font-size: clamp(9px, 1vw, 11px) !important;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+
+/* Large monitors (1400px+) - Bigger text on large screens - 75% zoom uchun */
+@media (min-width: 1400px) {
+  .grouped-data-table table {
+    font-size: clamp(10px, 1.2vw, 13px) !important;
+  }
+
+  .grouped-data-table thead th {
+    padding: clamp(3px, 0.6vw, 6px) clamp(4px, 0.8vw, 8px) !important;
+    font-size: clamp(10px, 1.2vw, 13px) !important;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+  }
+
+  .grouped-data-table tbody td {
+    padding: clamp(3px, 0.6vw, 6px) clamp(4px, 0.8vw, 8px) !important;
+    font-size: clamp(10px, 1.2vw, 13px) !important;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+  }
+
+  .grouped-data-table tbody tr {
+    height: 32px !important;
+  }
+}
+@media (min-width: 1920px) {
+  .selected-polygons-table th button {
+    font-size: clamp(9px, 1.1vw, 13px) !important;
+    padding: clamp(3px, 0.6vw, 5px) clamp(4px, 0.9vw, 7px) !important;
+  }
+
+  .selected-polygons-table th {
+    padding: clamp(3px, 0.6vw, 5px) clamp(4px, 0.9vw, 7px) !important;
+    font-size: clamp(9px, 1.1vw, 13px) !important;
+  }
+
+  .selected-polygons-table tbody tr {
+    height: 32px !important;
+  }
+
+  .selected-polygons-table td {
+    padding: clamp(3px, 0.6vw, 5px) clamp(4px, 0.9vw, 7px) !important;
+  }
+}
+
+/* Jadval qatorlari */
+.selected-polygons-table tbody tr {
+  height: 28px; /* Har bir qator balandligi */
+}
+
+/* =====================================================================
+   EVAPO-V30 LIGHT MODE ALIGNMENT (TRUE END OVERRIDE)
+   Evapo-RegionV30'dagi kun rejim ko‘k-light variantini V14ga qo‘llaydi.
+   ===================================================================== */
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style,
+body.light-theme .yield-water-chart-widget.evapo-v30-style {
+  --widget-bg-primary: #cadede !important;
+  --widget-bg-secondary: #e4edec !important;
+  --widget-bg-tertiary: rgba(61, 87, 85, 0.62) !important;
+  --widget-bg-elevated: rgba(61, 87, 85, 0.9) !important;
+  --widget-bg-overlay: rgba(202, 222, 222, 0.96) !important;
+  --text-primary: #3d5755 !important;
+  --text-secondary: #3d5755 !important;
+  --text-muted: rgba(61, 87, 85, 0.82) !important;
+  --text-accent: #3d5755 !important;
+  --border-primary: rgba(61, 87, 85, 0.22) !important;
+  --border-secondary: rgba(61, 87, 85, 0.35) !important;
+  --border-accent: #3d5755 !important;
+  --border-hover: rgba(61, 87, 85, 0.7) !important;
+  --btn-secondary: rgba(61, 87, 85, 0.9) !important;
+  --chart-grid: rgba(61, 87, 85, 0.25) !important;
+  --chart-axis: #3d5755 !important;
+  --chart-text: #3d5755 !important;
+
+  color: #3d5755 !important;
+  border-color: rgba(61, 87, 85, 0.22) !important;
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(199, 157, 52, 0.14),
+      transparent 58%
+    ),
+    radial-gradient(130% 90% at 86% 0%, rgba(61, 87, 85, 0.1), transparent 62%),
+    linear-gradient(156deg, #ffffff 0%, #cadede 100%) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .widget-header,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .widget-header,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filters-container,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .widget-header,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container {
+  background: #ffffff !important;
+  border-color: rgba(61, 87, 85, 0.28) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .widget-title,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .widget-title,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .widget-title {
+  color: #f5fcff !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-button,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filter-select,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filter-select,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-button,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .filter-select,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button {
+  color: #ffffff !important;
+  border-color: rgba(61, 87, 85, 0.4) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(61, 87, 85, 0.92),
+    rgba(61, 87, 85, 0.86)
+  ) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button:hover,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filter-select:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filter-select:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .filter-select:hover {
+  border-color: rgba(61, 87, 85, 0.7) !important;
+  box-shadow: 0 8px 14px rgba(61, 87, 85, 0.2) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button:focus,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button.open,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filter-select:focus,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button:focus,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button.open,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filter-select:focus,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button:focus,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button.open,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .filter-select:focus {
+  border-color: rgba(61, 87, 85, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(61, 87, 85, 0.22) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button-text,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-chevron,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-chevron,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-button-text,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-chevron {
+  color: #ffffff !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-dropdown,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-selector-popup,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-menu,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-dropdown,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .axis-menu,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-dropdown,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup {
+  background: linear-gradient(156deg, #ffffff 0%, #cadede 100%) !important;
+  border-color: rgba(61, 87, 85, 0.26) !important;
+  color: #3d5755 !important;
+  box-shadow: 0 14px 34px rgba(61, 87, 85, 0.2) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-item,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-item,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .select-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-item,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item {
+  color: #3d5755 !important;
+  background: transparent !important;
+  border-bottom-color: rgba(61, 87, 85, 0.2) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-item:hover,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item:hover:not(.disabled),
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item:hover:not(.disabled),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item:hover,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-item:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item:hover:not(.disabled),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item:hover {
+  background: rgba(61, 87, 85, 0.12) !important;
+  color: #3d5755 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-item.active,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.selected,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.active,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item.selected,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.active,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.selected,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.active,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item.selected,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-item.active,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.selected,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.active,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-selector-popup
+  .metric-item.selected {
+  color: #3d5755 !important;
+  border-left-color: rgba(61, 87, 85, 0.9) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(61, 87, 85, 0.16),
+    rgba(61, 87, 85, 0.08)
+  ) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-wrapper,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-area,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-inner,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .chart-wrapper,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .chart-area,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .chart-inner,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-wrapper,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-area,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-inner {
+  background: transparent !important;
+  border-color: rgba(61, 87, 85, 0.26) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-grid
+  line,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-grid
+  line,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-grid
+  line {
+  stroke: rgba(61, 87, 85, 0.25) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  .recharts-text,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  .recharts-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  .recharts-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  .recharts-text,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  .recharts-text,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  .recharts-text {
+  fill: #3d5755 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-label-btn,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-label-btn,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-label-btn {
+  color: #ffffff !important;
+  border-color: rgba(61, 87, 85, 0.4) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(61, 87, 85, 0.92),
+    rgba(61, 87, 85, 0.86)
+  ) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-label-btn:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-label-btn:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-label-btn:hover {
+  border-color: rgba(61, 87, 85, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(61, 87, 85, 0.22) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-prefix,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .axis-prefix,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-prefix {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
+  color: #ffffff !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-label-text,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-chevron,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-label-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-chevron,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-label-text,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-chevron {
+  color: #ffffff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .recharts-xAxis .recharts-text,
+.yield-water-chart-widget.evapo-v30-style .recharts-yAxis .recharts-text,
+.yield-water-chart-widget.evapo-v30-style .recharts-cartesian-axis-tick-value {
+  fill: #ffffff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .recharts-cartesian-axis-line,
+.yield-water-chart-widget.evapo-v30-style .recharts-cartesian-axis-tick-line,
+.yield-water-chart-widget.evapo-v30-style .recharts-xAxis line,
+.yield-water-chart-widget.evapo-v30-style .recharts-yAxis line,
+.yield-water-chart-widget.evapo-v30-style .recharts-xAxis path,
+.yield-water-chart-widget.evapo-v30-style .recharts-yAxis path {
+  stroke: #ffffff !important;
+  opacity: 0.9;
+}
+
+/* =====================================================================
+   EVAPO-V30 SELECT PARITY (final override)
+   ===================================================================== */
+
+.yield-water-chart-widget.evapo-v30-style .simple-dropdown .dropdown-button,
+.yield-water-chart-widget.evapo-v30-style .group-by-dropdown .dropdown-button,
+.yield-water-chart-widget.evapo-v30-style .axis-dropdown .dropdown-button,
+.yield-water-chart-widget.evapo-v30-style .filter-select {
+  height: 38px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(123, 220, 255, 0.34) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06) !important;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button:hover:not(:disabled),
+.yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button:hover:not(:disabled),
+.yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button:hover:not(:disabled),
+.yield-water-chart-widget.evapo-v30-style .filter-select:hover {
+  border-color: rgba(95, 225, 255, 0.7) !important;
+  box-shadow: 0 8px 14px rgba(11, 165, 236, 0.22) !important;
+  transform: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button:focus,
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button.open,
+.yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button:focus,
+.yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button.open,
+.yield-water-chart-widget.evapo-v30-style .axis-dropdown .dropdown-button:focus,
+.yield-water-chart-widget.evapo-v30-style .axis-dropdown .dropdown-button.open,
+.yield-water-chart-widget.evapo-v30-style .filter-select:focus {
+  border-color: rgba(95, 225, 255, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(29, 193, 255, 0.24) !important;
+  outline: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown.disabled
+  .dropdown-button,
+.yield-water-chart-widget.evapo-v30-style .dropdown-button:disabled,
+.yield-water-chart-widget.evapo-v30-style .filter-select:disabled {
+  opacity: 0.58 !important;
+  cursor: not-allowed !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-text,
+.yield-water-chart-widget.evapo-v30-style .dropdown-button-text {
+  color: #ffffff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-chevron {
+  color: #d9f4ff !important;
+  opacity: 0.85 !important;
+  font-size: 11px !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+.yield-water-chart-widget.evapo-v30-style .select-dropdown {
+  background: linear-gradient(156deg, #071a2b 0%, #0d2f49 100%) !important;
+  border: 1px solid rgba(126, 214, 255, 0.24) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 14px 34px rgba(3, 11, 22, 0.48) !important;
+  overflow: hidden !important;
+  backdrop-filter: blur(3px) !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-content {
+  background: transparent !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item,
+.yield-water-chart-widget.evapo-v30-style .select-item {
+  padding: 10px 14px !important;
+  min-height: 36px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #9cc7dd !important;
+  background: transparent !important;
+  border-bottom: none !important;
+  text-align: left !important;
+  transform: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+.yield-water-chart-widget.evapo-v30-style .select-item:hover {
+  background: rgba(88, 226, 255, 0.12) !important;
+  color: #3cc7ff !important;
+  padding-left: 14px !important;
+  transform: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item.selected,
+.yield-water-chart-widget.evapo-v30-style .select-item.active,
+.yield-water-chart-widget.evapo-v30-style .select-item.selected {
+  background: linear-gradient(
+    90deg,
+    rgba(60, 199, 255, 0.2),
+    rgba(11, 165, 236, 0.15)
+  ) !important;
+  color: #3cc7ff !important;
+  font-weight: 700 !important;
+  border-left: 3px solid #0ba5ec !important;
+  padding-left: 11px !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item.selected::after {
+  content: none !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-checkmark {
+  color: #3cc7ff !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .dropdown-item input,
+.yield-water-chart-widget.evapo-v30-style .dropdown-item input::placeholder {
+  color: #9cc7dd !important;
+  opacity: 1 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .filter-select option {
+  color: #ecf8ff !important;
+  background: #0f2e45 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .filter-select option:checked {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filter-select,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filter-select,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .simple-dropdown
+  .dropdown-button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .group-by-dropdown
+  .dropdown-button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-dropdown
+  .dropdown-button,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .filter-select {
+  color: #ffffff !important;
+  border-color: rgba(61, 87, 85, 0.4) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(61, 87, 85, 0.92),
+    rgba(61, 87, 85, 0.86)
+  ) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-dropdown,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-menu,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-dropdown,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-menu,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-dropdown {
+  background: linear-gradient(156deg, #ffffff 0%, #cadede 100%) !important;
+  border-color: rgba(61, 87, 85, 0.26) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .select-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-item {
+  color: #3d5755 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item:hover,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .dropdown-item:hover,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-item:hover {
+  background: rgba(61, 87, 85, 0.12) !important;
+  color: #3d5755 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .select-item.active,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.selected,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.active,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.selected,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .dropdown-item.selected,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .select-item.active,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .select-item.selected {
+  color: #3d5755 !important;
+  border-left-color: rgba(61, 87, 85, 0.9) !important;
+}
+
+/* === END EVAPO-V30 LIGHT MODE ALIGNMENT === */
+
+/* =====================================================================
+   EVAPO-V30 INDICATOR TEXT TUNING
+   ===================================================================== */
+
+.yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:first-child {
+  color: #ffffff !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2)
+  > span:last-child {
+  color: #ffffff !important;
+  opacity: 0.95 !important;
+}
+
+/* =====================================================================
+   EVAPO-V30 AXIS MENU LIGHT FIX (X/Y button popup)
+   ===================================================================== */
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .axis-menu,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu {
+  background: linear-gradient(156deg, #ffffff 0%, #cadede 100%) !important;
+  border: 1px solid rgba(61, 87, 85, 0.26) !important;
+  box-shadow: 0 14px 34px rgba(61, 87, 85, 0.2) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-head,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-head,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-head {
+  background: rgba(61, 87, 85, 0.9) !important;
+  border-bottom: 1px solid rgba(61, 87, 85, 0.3) !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-title,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-title,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-title {
+  color: #ffffff !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-list,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-list,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-list {
+  background: transparent !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-item,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-menu-item {
+  background: transparent !important;
+  color: #3d5755 !important;
+  border-bottom: 1px solid rgba(61, 87, 85, 0.22) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item:hover:not(.disabled),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item:hover:not(.disabled),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item:hover:not(.disabled) {
+  background: rgba(61, 87, 85, 0.12) !important;
+  color: #3d5755 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.active,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.active,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.active {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  color: #3d5755 !important;
+  border-left: 3px solid rgba(61, 87, 85, 0.9) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.disabled,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.disabled,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-menu-item.disabled {
+  background: rgba(47, 95, 125, 0.55) !important;
+  color: #3d5755 !important;
+  opacity: 0.6 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-item-label,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-item-label,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-item-label {
+  color: #3d5755 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-item-code,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .axis-item-code,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-item-code {
+  color: #3d5755 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-check,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .axis-check,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-check {
+  color: #3d5755 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .axis-lock,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .axis-lock,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .axis-lock {
+  color: #3d5755 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .filter-clear-btn {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+/* =====================================================================
+   EVAPO-V30 GROUPED TABLE LIGHT FIX
+   Tuman/Ekin jadvali kun rejimida oq bo'lib qolmasin + filter tagidan ko'rinmasin
+   ===================================================================== */
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .filters-container,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .filters-container {
+  background: #ffffff !important;
+  position: relative !important;
+  z-index: 30 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-mode-panel,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-mode-panel {
+  background: rgba(61, 87, 85, 0.56) !important;
+  border-top-color: rgba(61, 87, 85, 0.45) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  > div:nth-child(2),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  > div:nth-child(2),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  > div:nth-child(2) {
+  background: rgba(61, 87, 85, 0.66) !important;
+  border-color: rgba(61, 87, 85, 0.32) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr {
+  background: rgba(61, 87, 85, 0.88) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr {
+  background-color: transparent !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .selected-list-panel,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-list-panel,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-list-panel {
+  background: rgba(61, 87, 85, 0.56) !important;
+  border-top-color: rgba(61, 87, 85, 0.45) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-table-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-table-container,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-table-container {
+  background: rgba(61, 87, 85, 0.66) !important;
+  border-color: rgba(61, 87, 85, 0.32) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table {
+  background: transparent !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  tr {
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  ) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th {
+  background: transparent !important;
+  color: #ffffff !important;
+  border-bottom-color: rgba(61, 87, 85, 0.25) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button:hover,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button:focus,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button:focus,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button:focus {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  td,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  td,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  td {
+  color: #ffffff !important;
+  border-bottom-color: rgba(61, 87, 85, 0.18) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Sort icon (↑ ↓ ↕) size increase for filter headers */
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button
+  span:last-child,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button
+  span:last-child {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+}
+
+/* Table header filters: 12px text, no padding, and no button border */
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table thead th button {
+  font-size: 12px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  margin-left: 0 !important;
+  flex-direction: row !important;
+  white-space: nowrap !important;
+  line-height: 1.2 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:hover,
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:focus,
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:active,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:hover,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:focus,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:active {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* =====================================================================
+   EVAPO-V30 LIGHT FINAL PALETTE (requested)
+   Header selects + Fermer select + heatmap area + summary text
+   ===================================================================== */
+html.light-theme .yield-water-chart-widget.evapo-v30-style .chart-stage,
+html[data-theme="light"] .yield-water-chart-widget.evapo-v30-style .chart-stage,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .chart-stage {
+  background: #ffffff !important;
+  border: 1px solid rgba(61, 87, 85, 0.2) !important;
+  border-radius: 8px !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .heatmap-summary-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .heatmap-summary-text,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .heatmap-summary-text,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .heatmap-summary-text
+  strong,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .heatmap-summary-text
+  strong,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .heatmap-summary-text
+  strong,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .info-text-detail,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .info-text-separator,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .info-text-detail,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .info-text-separator,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .info-text-detail,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .info-text-separator {
+  color: #3d5755 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button
+  span,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button
+  span {
+  font-size: 12px !important;
+}
+
+/* Force all table columns to render left-to-right */
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table table {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table th,
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table td,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table th,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table td,
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table th button,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table th button,
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th
+  button
+  span,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table th button span {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table thead th,
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table tbody td,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table thead th,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table tbody td {
+  font-size: 10px !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  line-height: 1.2 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button
+  > div,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button
+  > div {
+  display: inline-flex !important;
+  width: auto !important;
+  max-width: 100% !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  text-align: left !important;
+  flex-direction: row !important;
+  white-space: nowrap !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button
+  span,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button
+  span,
+.yield-water-chart-widget.evapo-v30-style .selected-polygons-table tbody td,
+.yield-water-chart-widget.evapo-v30-style .grouped-data-table tbody td {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Keep X/Y metric headers on 2 lines in dark evapo-v30 table headers */
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button.metric-header-btn,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button.metric-header-btn {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  white-space: normal !important;
+  line-height: 1.1 !important;
+  width: 100% !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button.metric-header-btn
+  > div,
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button.metric-header-btn
+  > div {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  white-space: normal !important;
+}
+
+/* Top filters: slightly smaller controls */
+.yield-water-chart-widget .filters-container .simple-dropdown .dropdown-button,
+.yield-water-chart-widget
+  .filters-container
+  .group-by-dropdown
+  .dropdown-button {
+  height: 32px !important;
+  min-height: 32px !important;
+  font-size: 11px !important;
+  padding: 0 24px 0 10px !important;
+  border-radius: 8px !important;
+}
+
+.yield-water-chart-widget .filters-container .dropdown-text {
+  font-size: 11px !important;
+}
+
+.yield-water-chart-widget .filters-container .filter-clear-btn {
+  height: 32px !important;
+  font-size: 11px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+}
+
+/* Lower grouped controls (Fermer + Tozalash): smaller */
+.yield-water-chart-widget
+  .grouped-controls-row
+  .simple-dropdown
+  .dropdown-button,
+.yield-water-chart-widget
+  .grouped-controls-row
+  .group-by-dropdown
+  .dropdown-button {
+  height: 30px !important;
+  min-height: 30px !important;
+  font-size: 10px !important;
+  padding: 0 20px 0 8px !important;
+  border-radius: 7px !important;
+}
+
+.yield-water-chart-widget .grouped-controls-row .dropdown-text {
+  font-size: 10px !important;
+}
+
+.yield-water-chart-widget .grouped-controls-row .filter-clear-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  font-size: 10px !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+}
+
+/* Light mode: make axis lines the same color as axis numbers */
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-tick-value,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  .recharts-text,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  .recharts-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-tick-value,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  .recharts-text,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  .recharts-text,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-tick-value,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  .recharts-text,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  .recharts-text {
+  fill: #3d5755 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-line,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-tick-line,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-xAxis line,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-yAxis line,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-xAxis path,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-yAxis path,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-line,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-tick-line,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  line,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  line,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-xAxis
+  path,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  path,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-line,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-cartesian-axis-tick-line,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-xAxis line,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-yAxis line,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .recharts-xAxis path,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .recharts-yAxis
+  path {
+  stroke: #3d5755 !important;
+  opacity: 0.95 !important;
+}
+
+/* Final light-mode table palette alignment */
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-table-container,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-table-container,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-table-container,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-mode-panel,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-mode-panel,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-data-table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-data-table {
+  background: #e4edec !important;
+  border-color: rgba(61, 87, 85, 0.22) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  table,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  table {
+  background: #eaf1f0 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  tr,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr {
+  background: #d6e3e2 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  th,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  th,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  th,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  th {
+  color: #3d5755 !important;
+  border-bottom: 1px solid rgba(61, 87, 85, 0.26) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  td,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  td,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  td,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  td,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  td,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  td {
+  color: #3d5755 !important;
+  border-bottom: 1px solid rgba(61, 87, 85, 0.14) !important;
+  background: transparent !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:nth-child(even),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:nth-child(even),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:nth-child(even),
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:nth-child(even),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:nth-child(even),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.35) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  tbody
+  tr:hover,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:hover {
+  background: rgba(61, 87, 85, 0.12) !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:hover,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:focus,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:active,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:focus,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:active,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:focus,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th
+  button:active,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:hover,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:focus,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:active,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:focus,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:active,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:focus,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th
+  button:active {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Keep X/Y metric headers (4th/5th) as 2-layer text in light mode */
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(4)
+  button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(5)
+  button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(4)
+  button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(5)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(4)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(5)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(4)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(5)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(4)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(5)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(4)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(5)
+  button {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  margin-left: 0 !important;
+  white-space: normal !important;
+  line-height: 1.15 !important;
+  gap: 1px !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(4)
+  button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(4)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(4)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(4)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(4)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(4)
+  button {
+  color: #3498db !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(5)
+  button,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(5)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(5)
+  button,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(5)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .selected-polygons-table
+  thead
+  th:nth-child(5)
+  button,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th:nth-child(5)
+  button {
+  color: #27ae60 !important;
+}
+
+/* Final light-mode indicator cards fix */
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card {
+  background: #e4edec !important;
+  border: 1px solid rgba(61, 87, 85, 0.2) !important;
+  box-shadow: none !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:first-child,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:first-child,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:first-child {
+  color: #3d5755 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2)
+  > span:last-child,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2)
+  > span:last-child,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2)
+  > span:last-child,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2) {
+  color: #3d5755 !important;
+}
+
+/* Keep grouped mode (tuman/ekin turi) visual parity with farmer mode */
+.yield-water-chart-widget.evapo-v30-style .grouped-mode-panel .indicators-row {
+  gap: 6px !important;
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+  flex-wrap: nowrap !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .indicators-row
+  .indicator-card {
+  padding: 4px 5px !important;
+  border-radius: 4px !important;
+  text-align: center !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .indicators-row
+  .indicator-card
+  > div:first-child {
+  font-size: 9px !important;
+  margin-bottom: 7px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.1 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .indicators-row
+  .indicator-card
+  > div:nth-child(2) {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: baseline !important;
+  gap: 4px !important;
+  line-height: 1.1 !important;
+  margin-bottom: 0 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th {
+  padding: 4px 6px !important;
+  vertical-align: middle !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th
+  button {
+  font-size: 12px !important;
+  padding: 3px 6px !important;
+  min-height: 32px !important;
+  line-height: 1.15 !important;
+}
+
+/* Grouped mode only (tuman/ekin turi): stack header button text vertically */
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th
+  button {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  white-space: normal !important;
+  gap: 1px !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th
+  button
+  > div {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 1px !important;
+  width: 100% !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th
+  button
+  span {
+  display: inline-block !important;
+  font-size: 12px !important;
+  white-space: normal !important;
+  line-height: 1.1 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th
+  button
+  span:last-child {
+  vertical-align: top !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel
+  .grouped-data-table
+  thead
+  th:first-child {
+  font-size: 12px !important;
+}
+
+/* Grouped mode (tuman/ekin turi) table colors in light mode */
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-mode-panel,
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-data-table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-mode-panel,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-mode-panel,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-data-table {
+  background: #7d9493 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-list-title,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-list-title,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-list-title {
+  background: #7d9493 !important;
+  color: #f0f5f4 !important;
+  padding: 2px 0 !important;
+}
+
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  thead
+  th {
+  background: #d5e3e2 !important;
+}
+
+html.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-data-table,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  table,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:nth-child(even),
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:hover,
+html.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  td,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  table,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:nth-child(even),
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:hover,
+html[data-theme="light"]
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  td,
+body.light-theme .yield-water-chart-widget.evapo-v30-style .grouped-data-table,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  table,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:nth-child(even),
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  tr:hover,
+body.light-theme
+  .yield-water-chart-widget.evapo-v30-style
+  .grouped-data-table
+  tbody
+  td {
+  background: #f0f5f4 !important;
+}
+
+/* Final override: keep top filter bar on a single responsive row */
+.yield-water-chart-widget.evapo-v30-style .filters-container {
+  flex-wrap: nowrap !important;
+  flex-direction: row !important;
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 300 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style .filters-container .filter-dropdown {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .filters-container
+  .filter-dropdown
+  .dropdown-button {
+  min-width: 0 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .filters-container
+  .filter-dropdown
+  .dropdown-menu {
+  top: calc(100% + 4px) !important;
+  bottom: auto !important;
+  z-index: 100000 !important;
+}
+
+.yield-water-chart-widget.evapo-v30-style
+  .filters-container
+  .simple-dropdown.is-open {
+  z-index: 301 !important;
+}

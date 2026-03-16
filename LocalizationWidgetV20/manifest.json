@@ -1,0 +1,23 @@
+{
+  "name": "LocalizationWidgetV20",
+  "type": "widget",
+  "label": "LocalizationWidgetV20",
+  "icon": "icon.svg",
+  "description": "Multi-language selector widget for Evapo applications",
+  "version": "1.0.1",
+  "author": "GeoAlData",
+  "licence": "MIT",
+  "exbVersion": "1.16.0",
+  "properties": {},
+  "translatedLocales": ["en"],
+  "defaultSize": {
+    "width": 500,
+    "height": 120
+  },
+  "supports": {
+    "map": true
+  },
+  "dependency": ["jimu-arcgis"],
+  "hasSettingPage": true,
+  "useDataSources": true
+}

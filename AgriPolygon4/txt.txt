@@ -1,0 +1,860 @@
+/** @jsx jsx */
+import { React, AllWidgetProps, jsx } from 'jimu-core';
+import { JimuMapViewComponent, JimuMapView } from 'jimu-arcgis';
+import { Slider, Button, Label, Select, Option, Loading, Alert } from 'jimu-ui';
+
+// Import CSS
+import './style.css';
+
+import * as promiseUtils from "esri/core/promiseUtils";
+import FeatureLayer from "esri/layers/FeatureLayer";
+import FeatureLayerView from "esri/views/layers/FeatureLayerView";
+import * as FeatureEffect from "esri/layers/support/FeatureEffect";
+
+interface State {
+  jimuMapView: JimuMapView;
+  sliderValue: number;
+  isPlaying: boolean;
+  selectedLayer: FeatureLayer;
+  availableLayers: FeatureLayer[];
+  availableFields: any[];
+  firstAttribute: string;
+  secondAttribute: string;
+  layerView: FeatureLayerView;
+  highlight: any;
+  animation: any;
+  currentValues: {
+    first: number;
+    second: number;
+  };
+  isLoading: boolean;
+  error: string | null;
+  tooltipVisible: boolean;
+  tooltipPosition: {
+    x: number;
+    y: number;
+  };
+  tooltipFeatureName: string;
+  lastHitTest: any;
+}
+
+export default class Widget extends React.PureComponent<AllWidgetProps<any>, State> {
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      jimuMapView: undefined,
+      sliderValue: 50,
+      isPlaying: false,
+      selectedLayer: null,
+      availableLayers: [],
+      availableFields: [],
+      firstAttribute: '',
+      secondAttribute: '',
+      layerView: null,
+      highlight: null,
+      animation: null,
+      currentValues: {
+        first: 0,
+        second: 0
+      },
+      isLoading: false,
+      error: null,
+      tooltipVisible: false,
+      tooltipPosition: {
+        x: 0,
+        y: 0
+      },
+      tooltipFeatureName: '',
+      lastHitTest: null
+    };
+  }
+
+  // Reference to map container for positioning - properly typed for HTMLDivElement
+  mapContainerRef = React.createRef<HTMLDivElement>();
+
+  activeViewChangeHandler = (jmv: JimuMapView) => {
+    if (jmv) {
+      this.setState({
+        jimuMapView: jmv,
+        isLoading: true,
+        error: null
+      }, () => {
+        this.getAvailableLayers();
+      });
+    }
+  }
+
+  getAvailableLayers = () => {
+    const { jimuMapView } = this.state;
+    if (!jimuMapView) {
+      this.setState({
+        isLoading: false,
+        error: "No map view available"
+      });
+      return;
+    }
+
+    try {
+      // Get all feature layers in the map
+      const allLayers = jimuMapView.view.map.allLayers.toArray();
+      const featureLayers = allLayers
+        .filter(layer => layer.type === 'feature' && layer instanceof FeatureLayer)
+        .map(layer => layer as FeatureLayer);
+
+      if (featureLayers.length > 0) {
+        this.setState({
+          availableLayers: featureLayers,
+          selectedLayer: featureLayers[0],
+          isLoading: false
+        }, () => {
+          this.getLayerFields();
+        });
+      } else {
+        this.setState({
+          isLoading: false,
+          error: "No feature layers found in the map. Please add at least one feature layer."
+        });
+      }
+    } catch (error) {
+      console.error("Error getting available layers:", error);
+      this.setState({
+        isLoading: false,
+        error: `Error getting map layers: ${error.message}`
+      });
+    }
+  }
+
+  getLayerFields = async () => {
+    const { selectedLayer } = this.state;
+    if (!selectedLayer) {
+      this.setState({
+        error: "No layer selected"
+      });
+      return;
+    }
+
+    this.setState({
+      isLoading: true,
+      error: null
+    });
+
+    try {
+      // Wait for layer to load if it hasn't already
+      if (!selectedLayer.loaded) {
+        await selectedLayer.load();
+      }
+
+      // Get all numeric fields
+      const fields = selectedLayer.fields.filter(field =>
+        ['double', 'integer', 'single', 'small-integer', 'long'].includes(field.type)
+      );
+
+      if (fields.length < 2) {
+        this.setState({
+          isLoading: false,
+          error: "Selected layer does not have enough numeric fields for comparison (minimum 2 required)"
+        });
+        return;
+      }
+
+      this.setState({
+        availableFields: fields,
+        firstAttribute: fields.length > 0 ? fields[0].name : '',
+        secondAttribute: fields.length > 1 ? fields[1].name : '',
+        isLoading: false
+      }, () => {
+        this.setupLayerView();
+      });
+    } catch (error) {
+      console.error("Error getting layer fields:", error);
+      this.setState({
+        isLoading: false,
+        error: `Error reading layer fields: ${error.message}`
+      });
+    }
+  }
+
+  setupLayerView = async () => {
+    const { jimuMapView, selectedLayer } = this.state;
+    if (!jimuMapView || !selectedLayer) return;
+
+    this.setState({
+      isLoading: true,
+      error: null
+    });
+
+    try {
+      // First, if there's an existing layerView, we should clean up
+      if (this.state.layerView && this.state.layerView.featureEffect) {
+        this.state.layerView.featureEffect = null;
+      }
+
+      // Make sure the layer is in the map
+      const layerExists = jimuMapView.view.map.allLayers.includes(selectedLayer);
+      if (!layerExists) {
+        throw new Error("Selected layer is no longer in the map");
+      }
+
+      const layerView = await jimuMapView.view.whenLayerView(selectedLayer);
+
+      if (layerView) {
+        this.setState({
+          layerView,
+          isLoading: false
+        }, () => {
+          this.setupHoverTooltip();
+          this.setGapValue(50);
+        });
+      } else {
+        throw new Error("Failed to create layer view");
+      }
+    } catch (error) {
+      console.error("Error setting up layer view:", error);
+      this.setState({
+        isLoading: false,
+        error: `Error connecting to layer: ${error.message}`
+      });
+    }
+  }
+
+  setupHoverTooltip = () => {
+    const { jimuMapView, layerView, selectedLayer, firstAttribute, secondAttribute } = this.state;
+    if (!jimuMapView || !layerView || !selectedLayer || !firstAttribute || !secondAttribute) return;
+
+    const view = jimuMapView.view;
+
+    // Cancel any existing view.on handlers to prevent duplicates
+    if (this._pointerMoveHandler) {
+      this._pointerMoveHandler.remove();
+      this._pointerMoveHandler = null;
+    }
+
+    if (this._clickHandler) {
+      this._clickHandler.remove();
+      this._clickHandler = null;
+    }
+
+    // Mouse move tracking on the map container
+    if (this._mapMouseMoveHandler) {
+      this._mapMouseMoveHandler();
+      this._mapMouseMoveHandler = null;
+    }
+
+    // Run hit test to check for feature under cursor
+    const hitTest = promiseUtils.debounce((point) => {
+      return view.hitTest(point).then((hit) => {
+        const results = hit.results.filter((result) => {
+          return result.graphic.layer === selectedLayer;
+        });
+
+        if (results.length) {
+          const graphic = results[0].graphic;
+          const screenPoint = hit.screenPoint;
+
+          return {
+            graphic: graphic,
+            screenPoint: screenPoint,
+            values: {
+              first: graphic.getAttribute(firstAttribute),
+              second: graphic.getAttribute(secondAttribute)
+            },
+            featureName: graphic.getAttribute(selectedLayer.displayField) || 'Feature'
+          };
+        } else {
+          return null;
+        }
+      });
+    });
+
+    // Track mouse position over the map for tooltip positioning
+    const mapViewContainer = view.container;
+    if (mapViewContainer) {
+      this._mapMouseMoveHandler = () => {
+        mapViewContainer.removeEventListener('mousemove', this.updateTooltipPosition);
+        mapViewContainer.addEventListener('mousemove', this.updateTooltipPosition);
+      };
+      this._mapMouseMoveHandler();
+
+      // Add mouseleave handler to hide tooltip when mouse leaves the map
+      mapViewContainer.addEventListener('mouseleave', () => {
+        this.setState({
+          tooltipVisible: false
+        });
+      });
+    }
+
+    this._pointerMoveHandler = view.on("pointer-move", (event) => {
+      hitTest(event).then(
+        (result) => {
+          if (this.state.highlight) {
+            this.state.highlight.remove();
+            this.setState({ highlight: null });
+          }
+
+          if (!result) {
+            // Hide tooltip
+            this.setState({
+              tooltipVisible: false,
+              currentValues: { first: 0, second: 0 },
+              tooltipFeatureName: '',
+              lastHitTest: null
+            });
+
+            // Fix for surface property
+            if (view.container) {
+              view.container.style.cursor = "auto";
+            }
+          } else {
+            const highlight = layerView.highlight(result.graphic);
+
+            this.setState({
+              highlight,
+              currentValues: result.values,
+              tooltipVisible: true,
+              tooltipFeatureName: result.featureName,
+              lastHitTest: result
+            });
+
+            // Fix for surface property
+            if (view.container) {
+              view.container.style.cursor = "pointer";
+            }
+          }
+        },
+        () => {}
+      );
+    });
+
+    this._clickHandler = view.on("click", (event) => {
+      hitTest(event)
+        .then((result) => {
+          if (!result) {
+            return;
+          }
+
+          this.stopAnimation();
+
+          const first = result.values.first;
+          const second = result.values.second;
+
+          if (first !== null && second !== null && first !== undefined && second !== undefined &&
+              first + second > 0) {
+            const p_gap = ((Math.max(first, second) - Math.min(first, second)) / (first + second)) * 100;
+            this.animateTo(p_gap);
+          }
+        })
+        .catch((error) => {
+          if (error.name != "AbortError") {
+            console.error(error);
+          }
+        });
+    });
+  }
+
+  // Function to update tooltip position based on mouse event
+  updateTooltipPosition = (e) => {
+    if (this.state.tooltipVisible && this.state.lastHitTest) {
+      this.setState({
+        tooltipPosition: {
+          x: e.clientX,
+          y: e.clientY
+        }
+      });
+    }
+  };
+
+  // Properties to store event handlers for cleanup
+  _pointerMoveHandler = null;
+  _clickHandler = null;
+  _mapMouseMoveHandler = null;
+
+  setGapValue = (value) => {
+    const { layerView, firstAttribute, secondAttribute } = this.state;
+    if (!layerView || !firstAttribute || !secondAttribute) return;
+
+    this.setState({ sliderValue: value });
+
+    try {
+      // Create a feature effect to highlight features with the specified gap percentage
+      const effect = this.createEffect(value);
+
+      // Apply effect if it was successfully created
+      if (layerView && effect) {
+        layerView.featureEffect = effect;
+      }
+    } catch (error) {
+      console.error("Error applying feature effect:", error);
+      this.setState({
+        error: `Error applying filter: ${error.message}`
+      });
+    }
+  }
+
+  createEffect = (gapValue) => {
+    const { firstAttribute, secondAttribute } = this.state;
+    if (!firstAttribute || !secondAttribute) return null;
+
+    gapValue = Math.min(100, Math.max(0, gapValue));
+
+    function roundToTheTenth(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    try {
+      // Create a safe where clause to handle potential nulls or zeros in data
+      const whereClause = `
+        ${firstAttribute} IS NOT NULL AND
+        ${secondAttribute} IS NOT NULL AND
+        (${firstAttribute} + ${secondAttribute}) > 0 AND
+        (ABS(${firstAttribute} - ${secondAttribute}) / (${firstAttribute} + ${secondAttribute}) * 100) > ${roundToTheTenth(gapValue - 1)} AND
+        (ABS(${firstAttribute} - ${secondAttribute}) / (${firstAttribute} + ${secondAttribute}) * 100) < ${roundToTheTenth(gapValue + 1)}
+      `;
+
+      // Create a new instance of FeatureEffect with the correct properties
+      const effectOptions = {
+        filter: {
+          where: whereClause
+        },
+        includedEffect: "drop-shadow(0, 2px, 2px, black)",
+        excludedEffect: "grayscale(25%) blur(5px) opacity(25%)"
+      };
+
+      return new FeatureEffect.default(effectOptions);
+    } catch (error) {
+      console.error("Error creating feature effect:", error);
+      return null;
+    }
+  }
+
+  handleSliderChange = (evt) => {
+    this.stopAnimation();
+    this.setGapValue(evt.target.value);
+  }
+
+  startAnimation = () => {
+    this.stopAnimation();
+    const animation = this.animate(this.state.sliderValue);
+    this.setState({
+      animation,
+      isPlaying: true
+    });
+  }
+
+  stopAnimation = () => {
+    const { animation } = this.state;
+    if (!animation) {
+      return;
+    }
+
+    animation.remove();
+    this.setState({
+      animation: null,
+      isPlaying: false
+    });
+  }
+
+  animate = (startValue) => {
+    let animating = true;
+    let value = startValue;
+    let direction = 0.1;
+
+    const frame = () => {
+      if (!animating) {
+        return;
+      }
+
+      value += direction;
+      if (value > 100) {
+        value = 100;
+        direction = -direction;
+      } else if (value < 0) {
+        value = 0;
+        direction = -direction;
+      }
+
+      this.setGapValue(value);
+      requestAnimationFrame(frame);
+    };
+
+    requestAnimationFrame(frame);
+
+    return {
+      remove: () => {
+        animating = false;
+      }
+    };
+  }
+
+  animateTo = (targetValue) => {
+    let animating = true;
+
+    const frame = () => {
+      if (!animating) {
+        return;
+      }
+
+      let value = this.state.sliderValue;
+
+      if (Math.abs(targetValue - value) < 1) {
+        animating = false;
+        this.setGapValue(targetValue);
+      } else {
+        this.setGapValue(value + (targetValue - value) * 0.25);
+        requestAnimationFrame(frame);
+      }
+    };
+
+    requestAnimationFrame(frame);
+
+    const animation = {
+      remove: () => {
+        animating = false;
+      }
+    };
+
+    this.setState({ animation });
+    return animation;
+  }
+
+  handleLayerChange = (evt) => {
+    const { jimuMapView } = this.state;
+    if (!jimuMapView) return;
+
+    const selectedLayerId = evt.target.value;
+
+    // Find the selected layer from available layers
+    const selectedLayer = this.state.availableLayers.find(layer =>
+      layer.id === selectedLayerId
+    );
+
+    if (selectedLayer) {
+      // Clean up any existing effects or highlights
+      if (this.state.highlight) {
+        this.state.highlight.remove();
+      }
+
+      if (this.state.layerView && this.state.layerView.featureEffect) {
+        this.state.layerView.featureEffect = null;
+      }
+
+      // Reset and set the new layer
+      this.setState({
+        selectedLayer,
+        firstAttribute: '',
+        secondAttribute: '',
+        layerView: null,
+        highlight: null,
+        currentValues: { first: 0, second: 0 },
+        tooltipVisible: false,
+        error: null
+      }, () => {
+        this.getLayerFields();
+      });
+    }
+  }
+
+  handleFirstAttributeChange = (evt) => {
+    this.setState({
+      firstAttribute: evt.target.value,
+      currentValues: { first: 0, second: 0 }, // Reset current values
+      tooltipVisible: false
+    }, () => {
+      // Clean up any existing highlight
+      if (this.state.highlight) {
+        this.state.highlight.remove();
+        this.setState({ highlight: null });
+      }
+
+      this.setupHoverTooltip();
+      this.setGapValue(this.state.sliderValue);
+    });
+  }
+
+  handleSecondAttributeChange = (evt) => {
+    this.setState({
+      secondAttribute: evt.target.value,
+      currentValues: { first: 0, second: 0 }, // Reset current values
+      tooltipVisible: false
+    }, () => {
+      // Clean up any existing highlight
+      if (this.state.highlight) {
+        this.state.highlight.remove();
+        this.setState({ highlight: null });
+      }
+
+      this.setupHoverTooltip();
+      this.setGapValue(this.state.sliderValue);
+    });
+  }
+
+  togglePlayPause = () => {
+    const { isPlaying } = this.state;
+    if (isPlaying) {
+      this.stopAnimation();
+    } else {
+      this.startAnimation();
+    }
+  }
+
+  // Clean up any resources when component is unmounted
+  componentWillUnmount() {
+    this.stopAnimation();
+
+    if (this.state.highlight) {
+      this.state.highlight.remove();
+    }
+
+    if (this._pointerMoveHandler) {
+      this._pointerMoveHandler.remove();
+    }
+
+    if (this._clickHandler) {
+      this._clickHandler.remove();
+    }
+
+    if (this._mapMouseMoveHandler) {
+      const { jimuMapView } = this.state;
+      if (jimuMapView && jimuMapView.view.container) {
+        jimuMapView.view.container.removeEventListener('mousemove', this.updateTooltipPosition);
+      }
+    }
+
+    if (this.state.layerView && this.state.layerView.featureEffect) {
+      this.state.layerView.featureEffect = null;
+    }
+  }
+
+  render() {
+    const {
+      sliderValue,
+      isPlaying,
+      availableLayers,
+      availableFields,
+      firstAttribute,
+      secondAttribute,
+      currentValues,
+      isLoading,
+      error,
+      tooltipVisible,
+      tooltipPosition,
+      tooltipFeatureName
+    } = this.state;
+
+    // Calculate gap percentage for tooltip
+    const { first, second } = currentValues;
+    let p_gap = 0;
+    let p_first = 0;
+    let p_second = 0;
+
+    if (first !== null && second !== null && first !== undefined && second !== undefined &&
+        first + second > 0) {
+      p_gap = ((Math.max(first, second) - Math.min(first, second)) / (first + second)) * 100;
+      p_first = (first / (first + second)) * 100;
+      p_second = (second / (first + second)) * 100;
+    }
+
+    // Get field aliases for display in the tooltip
+    const firstFieldAlias = firstAttribute ? availableFields.find(f => f.name === firstAttribute)?.alias || firstAttribute : 'First';
+    const secondFieldAlias = secondAttribute ? availableFields.find(f => f.name === secondAttribute)?.alias || secondAttribute : 'Second';
+
+    return (
+      <div className="widget-attribute-comparison">
+        <div className="config-section">
+          <div className="widget-title">Attribute Comparison Widget</div>
+
+          {/* Loading indicator */}
+          {isLoading && (
+            <div className="loading-container">
+              <Loading type="secondary" />
+            </div>
+          )}
+
+          {/* Error message */}
+          {error && (
+            <Alert type="warning" className="error-message">
+              {error}
+            </Alert>
+          )}
+
+          <div className="select-container">
+            <Label className="select-label">Select Layer:</Label>
+            <Select
+              onChange={this.handleLayerChange}
+              value={this.state.selectedLayer?.id}
+              disabled={isLoading || availableLayers.length === 0}
+              placeholder={availableLayers.length === 0 ? "No layers available" : "Select a layer"}
+            >
+              {availableLayers.map(layer => (
+                <Option key={layer.id} value={layer.id}>
+                  {layer.title || layer.id}
+                </Option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="select-container">
+            <Label className="select-label">First Attribute:</Label>
+            <Select
+              onChange={this.handleFirstAttributeChange}
+              value={firstAttribute}
+              disabled={isLoading || availableFields.length === 0}
+              placeholder={availableFields.length === 0 ? "No fields available" : "Select first attribute"}
+            >
+              {availableFields.map(field => (
+                <Option key={field.name} value={field.name}>
+                  {field.alias || field.name}
+                </Option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="select-container">
+            <Label className="select-label">Second Attribute:</Label>
+            <Select
+              onChange={this.handleSecondAttributeChange}
+              value={secondAttribute}
+              disabled={isLoading || availableFields.length === 0}
+              placeholder={availableFields.length === 0 ? "No fields available" : "Select second attribute"}
+            >
+              {availableFields.map(field => (
+                <Option key={field.name} value={field.name}>
+                  {field.alias || field.name}
+                </Option>
+              ))}
+            </Select>
+          </div>
+        </div>
+
+        {/* Only show chart if we have both attributes selected */}
+        {firstAttribute && secondAttribute && (
+          <div className="chart">
+            <div className="chart-row">
+              <div className="chart-label">
+                {firstAttribute ? availableFields.find(f => f.name === firstAttribute)?.alias || firstAttribute : 'First'}:
+              </div>
+              <div className="chart-bar-container">
+                <div className="chart-bar first-bar" style={{ width: `${p_first}%` }}></div>
+              </div>
+              <div className="chart-value">{Math.round(first * 100) / 100}</div>
+            </div>
+
+            <div className="chart-row">
+              <div className="chart-label">
+                {secondAttribute ? availableFields.find(f => f.name === secondAttribute)?.alias || secondAttribute : 'Second'}:
+              </div>
+              <div className="chart-bar-container">
+                <div className="chart-bar second-bar" style={{ width: `${p_second}%` }}></div>
+              </div>
+              <div className="chart-value">{Math.round(second * 100) / 100}</div>
+            </div>
+
+            <div className="chart-row gap-row">
+              <div className="chart-label">Gap:</div>
+              <div className="chart-bar-container">
+                <div
+                  className="chart-bar gap-bar"
+                  style={{
+                    width: `${p_gap}%`,
+                    marginLeft: `${Math.min(p_first, p_second)}%`
+                  }}
+                ></div>
+              </div>
+              <div className="chart-value">{(Math.round(p_gap * 100) / 100).toFixed(2)}%</div>
+            </div>
+
+            <div className="tooltip-text">Hover over features to see values. Click on a feature to see locations with similar gap values.</div>
+          </div>
+        )}
+
+        {/* Only show slider controls if we have both attributes selected */}
+        {firstAttribute && secondAttribute && (
+          <div className="slider-container">
+            <div className="slider-value">
+              <span>{(Math.round(sliderValue * 100) / 100).toFixed(2)}% gap</span>
+            </div>
+
+            <Slider
+              className="slider"
+              value={sliderValue}
+              min={0}
+              max={100}
+              step={0.25}
+              onChange={isLoading ? undefined : this.handleSliderChange}
+              aria-label="Gap Percentage"
+            />
+
+            <div className="button-container">
+              <Button
+                onClick={this.togglePlayPause}
+                aria-label={isPlaying ? "Pause" : "Play"}
+                disabled={isLoading}
+              >
+                {isPlaying ? "Pause" : "Play"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="map-container" ref={this.mapContainerRef}>
+          {/* Map component */}
+          <JimuMapViewComponent
+            useMapWidgetId={this.props.useMapWidgetIds?.[0]}
+            onActiveViewChange={this.activeViewChangeHandler}
+          />
+
+          {/* Hover tooltip with chart that follows the mouse pointer */}
+          {tooltipVisible && (
+            <div
+              className={`hover-tooltip ${tooltipVisible ? 'visible' : ''}`}
+              style={{
+                left: `${tooltipPosition.x}px`,
+                top: `${tooltipPosition.y}px`
+              }}
+            >
+              <div className="tooltip-title">{tooltipFeatureName}</div>
+              <div className="tooltip-chart">
+                <div className="tooltip-chart-row">
+                  <div className="tooltip-chart-label">
+                    <span className="tooltip-dot first"></span>
+                    {firstFieldAlias}
+                  </div>
+                  <div className="tooltip-chart-bar-container">
+                    <div className="tooltip-chart-bar first-bar" style={{ width: `${p_first}%` }}></div>
+                  </div>
+                  <div className="tooltip-chart-value">{Math.round(first * 100) / 100}</div>
+                </div>
+                <div className="tooltip-chart-row">
+                  <div className="tooltip-chart-label">
+                    <span className="tooltip-dot second"></span>
+                    {secondFieldAlias}
+                  </div>
+                  <div className="tooltip-chart-bar-container">
+                    <div className="tooltip-chart-bar second-bar" style={{ width: `${p_second}%` }}></div>
+                  </div>
+                  <div className="tooltip-chart-value">{Math.round(second * 100) / 100}</div>
+                </div>
+                <div className="tooltip-chart-row tooltip-gap-row">
+                  <div className="tooltip-chart-label">
+                    <span className="tooltip-dot gap"></span>
+                    Gap
+                  </div>
+                  <div className="tooltip-chart-bar-container">
+                    <div
+                      className="tooltip-chart-bar gap-bar"
+                      style={{
+                        width: `${p_gap}%`,
+                        marginLeft: `${Math.min(p_first, p_second)}%`
+                      }}
+                    ></div>
+                  </div>
+                  <div className="tooltip-chart-value">{(Math.round(p_gap * 100) / 100).toFixed(2)}%</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+}

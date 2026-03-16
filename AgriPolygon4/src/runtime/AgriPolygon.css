@@ -1,0 +1,832 @@
+/* Main widget container (invisible until polygon clicked) */
+.agri3-attr-card {
+  --radius: 16px;
+  --border: rgba(126, 214, 255, 0.24);
+  --muted: #9cc7dd;
+  --primary: #3cc7ff;
+  --primary-hover: #0ba5ec;
+  --success: #10b981;
+  --error: #ef4444;
+  --shadow-light: 0 1px 3px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-heavy:
+    0 14px 34px rgba(3, 11, 22, 0.48), 0 4px 10px rgba(0, 0, 0, 0.1);
+  --backdrop: rgba(16, 24, 40, 0.7);
+  --agri-bg: #071a2b;
+  --agri-bg-soft: #0d2f49;
+  --agri-surface: rgba(9, 28, 44, 0.93);
+  --agri-surface-soft: rgba(17, 48, 71, 0.78);
+  --agri-text: #e9f8ff;
+  --agri-muted: #9cc7dd;
+  --agri-shell-bg:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.2),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.24),
+      transparent 62%
+    ),
+    linear-gradient(156deg, var(--agri-bg) 0%, var(--agri-bg-soft) 100%);
+  --agri-shell-border: var(--border);
+  --agri-shell-shadow: var(--shadow-heavy);
+  --agri-header-bg: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.94),
+    rgba(8, 28, 46, 0.94)
+  );
+  --agri-card-bg: rgba(15, 40, 61, 0.72);
+  --agri-card-border: rgba(123, 220, 255, 0.2);
+  --agri-card-hover: rgba(22, 58, 87, 0.82);
+  --agri-status-bg: rgba(11, 165, 236, 0.16);
+  --agri-status-border: rgba(123, 220, 255, 0.3);
+  --agri-thumb-caption: #d8f0fb;
+  --agri-title-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
+  --agri-control-bg: rgba(255, 255, 255, 0.14);
+  --agri-control-border: rgba(255, 255, 255, 0.2);
+  --agri-control-hover-bg: rgba(255, 255, 255, 0.24);
+  --agri-control-focus-bg: rgba(255, 255, 255, 0.3);
+  --agri-control-focus-ring: rgba(255, 255, 255, 0.5);
+  --agri-control-text: #ffffff;
+  --agri-pin-active-bg: rgba(255, 255, 255, 0.3);
+  --agri-loading-bg: rgba(245, 158, 11, 0.1);
+  --agri-loading-border: rgba(245, 158, 11, 0.2);
+  --agri-loading-text: #d97706;
+  --agri-error-soft-bg: rgba(239, 68, 68, 0.1);
+  --agri-error-soft-border: rgba(239, 68, 68, 0.2);
+  --agri-error-panel-bg: rgba(239, 68, 68, 0.16);
+  --agri-error-panel-border: rgba(248, 113, 113, 0.34);
+  --agri-error-title: #fecaca;
+  --agri-error-message: #fee2e2;
+  --agri-spinner-track: rgba(59, 130, 246, 0.2);
+  --agri-scrollbar-thumb: rgba(59, 130, 246, 0.3);
+  --agri-scrollbar-thumb-hover: rgba(59, 130, 246, 0.5);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  /* Main widget is invisible - only popup shows when polygon is clicked */
+}
+
+.agri3-attr-card.agri3-theme-light {
+  --border: rgba(61, 87, 85, 0.2);
+  --muted: #3d5755;
+  --primary: #c79d34;
+  --primary-hover: #a8852c;
+  --shadow-heavy:
+    0 12px 24px rgba(61, 87, 85, 0.16), 0 4px 10px rgba(61, 87, 85, 0.08);
+  --agri-bg: #cadede;
+  --agri-bg-soft: #cadede;
+  --agri-surface: rgba(255, 255, 255, 0.94);
+  --agri-surface-soft: #e4edec;
+  --agri-text: #3d5755;
+  --agri-muted: #3d5755;
+  --agri-shell-bg: #ffffff;
+  --agri-shell-border: rgba(61, 87, 85, 0.2);
+  --agri-shell-shadow: none;
+  --agri-header-bg: linear-gradient(180deg, #e4edec, #e4edec);
+  --agri-card-bg: #e4edec;
+  --agri-card-border: rgba(61, 87, 85, 0.2);
+  --agri-card-hover: #d7e4e3;
+  --agri-status-bg: rgba(199, 157, 52, 0.12);
+  --agri-status-border: rgba(199, 157, 52, 0.3);
+  --agri-thumb-caption: #3d5755;
+  --agri-title-shadow: none;
+  --agri-control-bg: #3d5755;
+  --agri-control-border: #3d5755;
+  --agri-control-hover-bg: #c79d34;
+  --agri-control-focus-bg: #c79d34;
+  --agri-control-focus-ring: rgba(199, 157, 52, 0.2);
+  --agri-control-text: #ffffff;
+  --agri-pin-active-bg: #c79d34;
+  --agri-loading-bg: rgba(199, 157, 52, 0.12);
+  --agri-loading-border: rgba(199, 157, 52, 0.28);
+  --agri-loading-text: #3d5755;
+  --agri-error-soft-bg: rgba(220, 79, 108, 0.12);
+  --agri-error-soft-border: rgba(220, 79, 108, 0.24);
+  --agri-error-panel-bg: rgba(220, 79, 108, 0.1);
+  --agri-error-panel-border: rgba(220, 79, 108, 0.18);
+  --agri-error-title: #8f3048;
+  --agri-error-message: #6f4652;
+  --agri-spinner-track: rgba(61, 87, 85, 0.18);
+  --agri-scrollbar-thumb: rgba(61, 87, 85, 0.28);
+  --agri-scrollbar-thumb-hover: rgba(199, 157, 52, 0.45);
+}
+
+html.light-theme .agri3-attr-card,
+html[data-theme="light"] .agri3-attr-card,
+body.light-theme .agri3-attr-card {
+  --border: rgba(61, 87, 85, 0.2);
+  --muted: #3d5755;
+  --primary: #c79d34;
+  --primary-hover: #a8852c;
+  --shadow-heavy:
+    0 12px 24px rgba(61, 87, 85, 0.16), 0 4px 10px rgba(61, 87, 85, 0.08);
+  --agri-bg: #cadede;
+  --agri-bg-soft: #cadede;
+  --agri-surface: rgba(255, 255, 255, 0.94);
+  --agri-surface-soft: #e4edec;
+  --agri-text: #3d5755;
+  --agri-muted: #3d5755;
+  --agri-shell-bg: #ffffff;
+  --agri-shell-border: rgba(61, 87, 85, 0.2);
+  --agri-shell-shadow: none;
+  --agri-header-bg: linear-gradient(180deg, #e4edec, #e4edec);
+  --agri-card-bg: #e4edec;
+  --agri-card-border: rgba(61, 87, 85, 0.2);
+  --agri-card-hover: #d7e4e3;
+  --agri-status-bg: rgba(199, 157, 52, 0.12);
+  --agri-status-border: rgba(199, 157, 52, 0.3);
+  --agri-thumb-caption: #3d5755;
+  --agri-title-shadow: none;
+  --agri-control-bg: #3d5755;
+  --agri-control-border: #3d5755;
+  --agri-control-hover-bg: #c79d34;
+  --agri-control-focus-bg: #c79d34;
+  --agri-control-focus-ring: rgba(199, 157, 52, 0.2);
+  --agri-control-text: #ffffff;
+  --agri-pin-active-bg: #c79d34;
+  --agri-loading-bg: rgba(199, 157, 52, 0.12);
+  --agri-loading-border: rgba(199, 157, 52, 0.28);
+  --agri-loading-text: #3d5755;
+  --agri-error-soft-bg: rgba(220, 79, 108, 0.12);
+  --agri-error-soft-border: rgba(220, 79, 108, 0.24);
+  --agri-error-panel-bg: rgba(220, 79, 108, 0.1);
+  --agri-error-panel-border: rgba(220, 79, 108, 0.18);
+  --agri-error-title: #8f3048;
+  --agri-error-message: #6f4652;
+  --agri-spinner-track: rgba(61, 87, 85, 0.18);
+  --agri-scrollbar-thumb: rgba(61, 87, 85, 0.28);
+  --agri-scrollbar-thumb-hover: rgba(199, 157, 52, 0.45);
+}
+
+/* Direct popup without overlay blur - optimized for performance and better positioning */
+.agri3-popup-direct {
+  position: fixed;
+  /* Minimal width - allow compact 1-column cards */
+  min-width: 240px;
+  width: auto;
+  max-width: 100%;
+  background: var(--agri-shell-bg);
+  border-radius: 16px;
+  box-shadow: var(--agri-shell-shadow);
+  border: 1px solid var(--agri-shell-border);
+  overflow: hidden;
+  z-index: 10000;
+  /* Simplified animation for better performance */
+  opacity: 0;
+  transform: scale(0.95);
+  animation: agri3PopupShow 0.15s ease-out forwards;
+  /* Hardware acceleration */
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  /* Ensure popup doesn't go outside viewport */
+  max-height: 85vh;
+  overflow-y: auto;
+  /* CRITICAL: Include padding/borders in width calculation */
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  /* ABSOLUTE CONSTRAINT: Force popup to stay within bounds */
+  /* These are overridden by inline styles in TypeScript, but ensure hard limits */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  /* Prevent text overflow */
+  word-break: break-word;
+  /* Preserve rounded corners while clipping overflow */
+  clip-path: inset(0 round 16px);
+}
+
+/* Make popup responsive to smaller map containers */
+@media (max-width: 768px) {
+  .agri3-popup-direct {
+    min-width: 240px;
+    max-width: 95vw;
+    max-height: 80vh;
+  }
+}
+
+@media (max-width: 500px) {
+  .agri3-popup-direct {
+    min-width: 200px;
+    max-width: 98vw;
+    max-height: 75vh;
+  }
+}
+
+/* Simplified, fast animations */
+@keyframes agri3PopupShow {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.agri3-popup-header {
+  background: var(--agri-header-bg);
+  /* Ultra compact header */
+  padding: 5px 8px;
+  position: relative;
+  /* Add slight border to distinguish from content */
+  border-bottom: 1px solid var(--agri-card-border);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  /* CRITICAL: Ensure header doesn't overflow */
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.agri3-popup-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--agri-text);
+  text-shadow: var(--agri-title-shadow);
+  margin: 0;
+  /* Allow title to grow but not overflow */
+  flex: 1;
+  min-width: 80px;
+  /* Handle long titles gracefully */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Ensure title stays within bounds */
+  box-sizing: border-box;
+}
+
+@media (max-width: 400px) {
+  .agri3-popup-title {
+    font-size: 14px;
+  }
+}
+
+.agri3-popup-close {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--agri-control-bg);
+  border: 1px solid var(--agri-control-border);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  /* Improve accessibility */
+  outline: none;
+  /* Better hover feedback */
+  flex-shrink: 0;
+}
+
+.agri3-popup-close:hover {
+  background: var(--agri-control-hover-bg);
+  transform: scale(1.05);
+}
+
+.agri3-popup-close:focus {
+  background: var(--agri-control-focus-bg);
+  box-shadow: 0 0 0 2px var(--agri-control-focus-ring);
+}
+
+.agri3-popup-close::before {
+  content: "×";
+  color: var(--agri-control-text);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+@media (max-width: 400px) {
+  .agri3-popup-close {
+    width: 22px;
+    height: 22px;
+  }
+
+  .agri3-popup-close::before {
+    font-size: 14px;
+  }
+}
+
+.agri3-popup-pin {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--agri-control-bg);
+  border: 1px solid var(--agri-control-border);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.agri3-popup-pin:hover {
+  background: var(--agri-control-hover-bg);
+  transform: scale(1.05);
+}
+
+.agri3-popup-pin:focus {
+  background: var(--agri-control-focus-bg);
+  box-shadow: 0 0 0 2px var(--agri-control-focus-ring);
+}
+
+.agri3-popup-pin.active {
+  background: var(--agri-pin-active-bg);
+}
+
+@media (max-width: 400px) {
+  .agri3-popup-pin {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.agri3-popup-content {
+  /* Ultra compact padding */
+  padding: 6px 8px 8px 8px;
+  background: var(--agri-surface);
+  /* Handle overflow for long content */
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(85vh - 100px); /* Account for header height and margins */
+  /* Responsive padding for small screens */
+  box-sizing: border-box;
+  /* CRITICAL: Ensure content doesn't overflow */
+  min-width: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+@media (max-width: 500px) {
+  .agri3-popup-content {
+    padding: 10px 12px 12px 12px;
+    max-height: calc(80vh - 90px);
+  }
+}
+
+/* Status indicators */
+.agri3-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  /* Make full width for better visual balance */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.agri3-status-waiting {
+  background: var(--agri-status-bg);
+  color: var(--agri-text);
+  border: 1px solid var(--agri-status-border);
+}
+
+.agri3-status-loading {
+  background: var(--agri-loading-bg);
+  color: var(--agri-loading-text);
+  border: 1px solid var(--agri-loading-border);
+}
+
+.agri3-status-error {
+  background: var(--agri-error-soft-bg);
+  color: var(--error);
+  border: 1px solid var(--agri-error-soft-border);
+}
+
+/* Modern field grid - auto-fit responsive layout with scroll for 4+ cards */
+.agri3-field-grid {
+  display: grid;
+  /* Responsive: 1 column default, 2+ if space allows */
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  /* Optimal gap between cards */
+  gap: 6px;
+  /* Minimal bottom spacing */
+  margin-bottom: 0;
+  /* CRITICAL: Ensure grid doesn't overflow */
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  /* Scrollable when 4+ cards */
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px; /* Space for scrollbar */
+}
+
+/* Force 1 column on very small screens */
+@media (max-width: 350px) {
+  .agri3-field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agri3-field-item {
+  background: var(--agri-card-bg);
+  border-radius: 4px;
+  /* Ultra compact padding */
+  padding: 4px 6px;
+  border: 1px solid var(--agri-card-border);
+  /* Simplified hover effect */
+  transition:
+    background-color 0.2s ease,
+    transform 0.1s ease;
+  /* CRITICAL: Ensure field item doesn't overflow */
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.agri3-field-item:hover {
+  background: var(--agri-card-hover);
+  transform: translateY(-1px);
+}
+
+.agri3-field-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--agri-muted);
+  text-transform: uppercase;
+  letter-spacing: 0px;
+  margin-bottom: 2px;
+  display: block;
+  /* Handle long labels */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agri3-field-value {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--agri-text);
+  word-break: break-word;
+  line-height: 1.2;
+  /* Handle very long values */
+  max-height: 4.2em; /* Approximately 3 lines */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.agri3-field-value.empty {
+  color: var(--agri-muted);
+  font-style: italic;
+}
+
+/* Loading animation */
+.agri3-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+}
+
+.agri3-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--agri-spinner-track);
+  border-top: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: agri3Spin 0.8s linear infinite;
+  /* Hardware acceleration */
+  will-change: transform;
+}
+
+@keyframes agri3Spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.agri3-loading-text {
+  font-size: 14px;
+  color: var(--agri-muted);
+  font-weight: 500;
+}
+
+/* Error styling */
+.agri3-error-container {
+  background: var(--agri-error-panel-bg);
+  border: 1px solid var(--agri-error-panel-border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.agri3-error-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--error);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  color: white;
+  font-size: 20px;
+}
+
+.agri3-error-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--agri-error-title);
+  margin-bottom: 8px;
+}
+
+.agri3-error-message {
+  font-size: 14px;
+  color: var(--agri-error-message);
+  line-height: 1.5;
+  /* Handle long error messages */
+  word-break: break-word;
+}
+
+/* Enhanced responsive design */
+@media (max-width: 480px) {
+  .agri3-popup-direct {
+    min-width: 280px;
+    margin: 10px;
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .agri3-popup-content {
+    padding: 16px;
+    max-height: calc(100vh - 100px);
+  }
+
+  .agri3-popup-header {
+    padding: 12px 16px;
+  }
+
+  .agri3-popup-title {
+    font-size: 16px;
+    padding-right: 35px;
+  }
+
+  .agri3-popup-close {
+    width: 24px;
+    height: 24px;
+    top: 10px;
+    right: 10px;
+  }
+
+  .agri3-field-grid {
+    gap: 10px;
+  }
+
+  .agri3-field-item {
+    padding: 10px;
+  }
+
+  .agri3-field-value {
+    font-size: 14px;
+  }
+}
+
+/* Custom scrollbar for better UX */
+.agri3-popup-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--agri-scrollbar-thumb) transparent;
+}
+
+.agri3-popup-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.agri3-popup-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agri3-popup-content::-webkit-scrollbar-thumb {
+  background: var(--agri-scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.agri3-popup-content::-webkit-scrollbar-thumb:hover {
+  background: var(--agri-scrollbar-thumb-hover);
+}
+
+/* Improved focus management for accessibility */
+.agri3-popup-direct:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Handle high contrast mode */
+@media (prefers-contrast: high) {
+  .agri3-popup-direct {
+    border: 2px solid #000;
+  }
+
+  .agri3-field-item {
+    border: 2px solid #000;
+  }
+
+  .agri3-popup-close {
+    border: 2px solid rgba(255, 255, 255, 0.8);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .agri3-popup-direct {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .agri3-loading-spinner {
+    animation: none;
+  }
+
+  .agri3-field-item {
+    transition: none;
+  }
+
+  .agri3-popup-close {
+    transition: none;
+  }
+}
+
+/* section header */
+.agri3-attachments {
+  margin-top: 12px;
+}
+
+.agri3-attachments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.agri3-attachments-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--agri-text);
+}
+
+/* grid & cards - compact attachments */
+.agri3-grid {
+  display: grid;
+  /* Smaller items to keep popup compact */
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+@media (max-width: 450px) {
+  .agri3-grid {
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 6px;
+  }
+}
+
+.agri3-card {
+  background: var(--agri-card-bg);
+  border: 1px solid var(--agri-card-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.agri3-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.agri3-attachment-thumb img {
+  display: block;
+  width: 100%;
+  height: 70px;
+  object-fit: cover;
+}
+
+@media (max-width: 400px) {
+  .agri3-attachment-thumb img {
+    height: 60px;
+  }
+}
+
+.agri3-thumb-caption {
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--agri-thumb-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agri3-attachments-files {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.agri3-attachment-file {
+  padding: 8px;
+}
+
+.agri3-attachment-file-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agri3-attachment-file-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agri3-attachment-file-meta {
+  color: var(--agri-muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.agri3-attachment-download {
+  font-size: 12px;
+  text-decoration: underline;
+  color: var(--agri-text);
+}
+
+/* Chart container */
+.agri3-chart-container {
+  margin-top: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.agri3-chart-title-outside {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--agri-text);
+  margin-top: 8px;
+  margin-bottom: 2px;
+  padding-left: 2px;
+  line-height: 1.2;
+}
+
+.agri3-chart-container svg {
+  width: 100%;
+  height: auto;
+  border-radius: inherit;
+  transition: opacity 0.2s ease;
+}
+
+.agri3-chart-container svg text {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  pointer-events: none;
+}
+
+.agri3-chart-container svg rect,
+.agri3-chart-container svg circle {
+  transition: opacity 0.15s ease;
+  cursor: default;
+}
+
+.agri3-chart-container svg rect:hover,
+.agri3-chart-container svg circle:hover {
+  opacity: 1;
+  filter: brightness(1.15);
+}

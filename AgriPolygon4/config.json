@@ -1,0 +1,15 @@
+{
+  "fieldsToShow": [],
+  "titleField": "",
+  "labels": {},
+  "settings": {
+    "zoomToSelection": true,
+    "showMapPopup": false,
+    "showAttachments": true
+  },
+  "chartEnabled": false,
+  "chartType": "bar",
+  "chartTitle": "",
+  "chartFields": [],
+  "chartColor": "#3b82f6"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "AgriPolygon4",
+  "label": "AgriPolygon4",
+  "type": "widget",
+  "version": "1.0.0",
+  "exbVersion": "1.16.0",
+  "author": "Custom Developer",
+  "description": "A custom table widget that displays feature layer data from a map",
+  "copyright": "",
+  "license": "",
+  "properties": {},
+  "translatedLocales": ["en", "ru", "uz_lat", "uz_cyrl"],
+  "defaultSize": {
+    "width": 800,
+    "height": 500
+  }
+}

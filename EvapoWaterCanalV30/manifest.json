@@ -1,0 +1,24 @@
+{
+  "name": "EvapoWaterCanalV30",
+  "label": "EvapoWaterCanalV30",
+  "type": "widget",
+  "version": "1.0.0",
+  "exbVersion": "1.18.0",
+  "author": "Custom Developer",
+  "description": "Combined 2-in-1 widget: Water Source and Canal bar charts",
+  "copyright": "",
+  "license": "",
+  "properties": {},
+  "translatedLocales": ["en"],
+  "defaultSize": {
+    "width": 800,
+    "height": 500
+  },
+  "supports": {
+    "map": true
+  },
+  "dependency": ["jimu-arcgis"],
+  "supportInlineEditing": true,
+  "hasSettingPage": true,
+  "useDataSources": false
+}

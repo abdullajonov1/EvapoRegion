@@ -1,0 +1,833 @@
+/* EvapoWaterCanalV20 - Modern water-themed UI (visual-only changes) */
+
+:root {
+  --water-font: "Manrope", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+.water-canal-card {
+  --wc-bg: #071a2b;
+  --wc-bg-soft: #0d2f49;
+  --wc-surface: rgba(9, 28, 44, 0.74);
+  --wc-border: rgba(126, 214, 255, 0.24);
+  --wc-text: #e9f8ff;
+  --wc-muted: #9cc7dd;
+  --wc-accent: #3cc7ff;
+  --wc-accent-strong: #0ba5ec;
+  --wc-danger: #ff7b93;
+  --wc-shadow: 0 0 0 rgba(3, 11, 22, 0);
+
+  position: relative;
+  isolation: isolate;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  overflow: hidden;
+  font-family: var(--water-font);
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.2),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.24),
+      transparent 62%
+    ),
+    linear-gradient(156deg, var(--wc-bg) 0%, var(--wc-bg-soft) 100%);
+  border: 1px solid var(--wc-border);
+  box-shadow:
+    var(--wc-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  container-type: size;
+  container-name: water-canal-widget;
+  transition:
+    border-color 240ms ease,
+    box-shadow 240ms ease,
+    transform 240ms ease;
+}
+
+.water-canal-card::before,
+.water-canal-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -28% -58% -28%;
+  height: 76%;
+  border-radius: 48% 52% 42% 58% / 44% 58% 42% 56%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.water-canal-card::before {
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  background: transparent;
+  opacity: 1;
+  animation: none;
+}
+
+.water-canal-card::after {
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  background: transparent;
+  opacity: 1;
+  animation: none;
+}
+
+.water-canal-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 6px 6px;
+  overflow: hidden;
+  backdrop-filter: blur(3px);
+}
+
+@container (max-height: 250px) {
+  .water-canal-content {
+    padding: 6px;
+  }
+}
+
+@container (max-height: 180px) {
+  .water-canal-content {
+    padding: 4px 6px 6px;
+  }
+}
+
+.water-canal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  min-height: 32px;
+}
+
+.water-canal-header-title {
+  flex: 1;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wc-text);
+  text-wrap: balance;
+}
+
+.water-canal-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--wc-muted);
+  margin-left: 6px;
+}
+
+.water-canal-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.water-canal-sort-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.water-canal-sort-button {
+  width: 28px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(123, 220, 255, 0.34);
+  background: linear-gradient(
+    180deg,
+    rgba(17, 48, 71, 0.84),
+    rgba(8, 28, 46, 0.84)
+  );
+  color: var(--wc-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.water-canal-sort-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(95, 225, 255, 0.7);
+  box-shadow: 0 8px 14px rgba(11, 165, 236, 0.22);
+}
+
+.water-canal-sort-button.active {
+  color: #ffffff;
+  border-color: rgba(96, 233, 255, 0.9);
+  background: linear-gradient(180deg, #19bbff, #0a8ac7);
+  box-shadow:
+    0 0 0 1px rgba(88, 228, 255, 0.34),
+    0 10px 16px rgba(12, 132, 187, 0.34);
+}
+
+.water-canal-display-count {
+  min-width: 56px;
+  border: 1px solid rgba(123, 220, 255, 0.32);
+  border-radius: 8px;
+  padding: 4px 24px 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wc-text);
+  background:
+    linear-gradient(180deg, rgba(16, 46, 67, 0.86), rgba(9, 30, 47, 0.86)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23d9f4ff' d='M6 9L1 4h10z'/%3E%3C/svg%3E")
+      no-repeat right 7px center / 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.water-canal-display-count:hover,
+.water-canal-display-count:focus {
+  border-color: rgba(95, 225, 255, 0.7);
+  box-shadow: 0 0 0 2px rgba(29, 193, 255, 0.24);
+  outline: none;
+}
+
+.water-canal-display-count::-ms-expand {
+  display: none;
+}
+
+.water-canal-display-count option {
+  color: #ecf8ff;
+  background: #0f2e45;
+}
+
+.water-canal-display-count option:checked {
+  background: #1486be;
+  color: #ffffff;
+}
+
+.water-canal-chart-container {
+  position: relative;
+  flex: 1;
+  min-height: 100px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  border-radius: 14px;
+  border: 1px solid rgba(117, 210, 255, 0.24);
+  background: linear-gradient(
+    180deg,
+    rgba(10, 34, 55, 0.52),
+    rgba(5, 22, 38, 0.62)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: wc-fade-up 380ms ease both;
+  outline: none !important;
+}
+
+.water-canal-chart-container::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 26%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(154, 233, 255, 0.16),
+    transparent
+  );
+  animation: none;
+}
+
+.water-canal-chart-container.compact {
+  min-height: 80px;
+}
+
+.water-canal-chart-container .recharts-wrapper,
+.water-canal-chart-container .recharts-surface {
+  overflow: visible;
+  outline: none !important;
+}
+
+.water-canal-chart-container .recharts-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+.water-canal-chart-container .recharts-tooltip-wrapper {
+  z-index: 9999 !important;
+  pointer-events: none !important;
+}
+
+.water-canal-chart-container:focus,
+.water-canal-chart-container:focus-visible,
+.water-canal-chart-container:focus-within,
+.water-canal-chart-container .recharts-wrapper:focus,
+.water-canal-chart-container .recharts-wrapper:focus-visible,
+.water-canal-chart-container .recharts-surface:focus,
+.water-canal-chart-container svg:focus,
+.water-canal-chart-container svg:focus-visible {
+  outline: none !important;
+  border-color: rgba(117, 210, 255, 0.24) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.water-canal-loading-container,
+.water-canal-error,
+.water-canal-no-data {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  border-radius: 12px;
+  background: rgba(6, 24, 40, 0.42);
+  border: 1px dashed rgba(117, 210, 255, 0.22);
+}
+
+.water-canal-loading-container p,
+.water-canal-no-data p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--wc-muted);
+}
+
+.water-canal-no-data h3 {
+  margin-bottom: 6px;
+  font-size: 15px;
+  color: var(--wc-text);
+}
+
+.water-canal-error {
+  padding: 16px;
+}
+
+.water-canal-error p {
+  margin-bottom: 10px;
+  color: var(--wc-danger);
+  font-weight: 600;
+}
+
+.water-canal-error button,
+.water-canal-no-data button {
+  border-radius: 8px;
+}
+
+.recharts-bar-rectangle {
+  transform-origin: left center;
+  transform-box: fill-box;
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease,
+    filter 220ms ease;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2)) saturate(1.08);
+  animation: wc-bar-enter 620ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.water-canal-chart-container .recharts-bar-rectangle path,
+.water-canal-chart-container .recharts-rectangle {
+  stroke: none;
+  stroke-width: 0;
+  filter: drop-shadow(0 0 8px rgba(79, 216, 255, 0.18));
+}
+
+.water-canal-chart-container .recharts-bar-background-rectangle,
+.water-canal-chart-container
+  .recharts-bar-background-rectangle.recharts-rectangle {
+  fill: #293540 !important;
+  stroke: none !important;
+  filter: none !important;
+}
+
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(1) {
+  animation-delay: 40ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(2) {
+  animation-delay: 90ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(3) {
+  animation-delay: 140ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(4) {
+  animation-delay: 190ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(5) {
+  animation-delay: 240ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(6) {
+  animation-delay: 290ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(7) {
+  animation-delay: 340ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(8) {
+  animation-delay: 390ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(9) {
+  animation-delay: 440ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(10) {
+  animation-delay: 490ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(11) {
+  animation-delay: 540ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(12) {
+  animation-delay: 590ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(13) {
+  animation-delay: 640ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(14) {
+  animation-delay: 690ms;
+}
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(15) {
+  animation-delay: 740ms;
+}
+
+.water-canal-chart-container .recharts-bar-rectangle:nth-of-type(even) {
+  filter: drop-shadow(0 6px 10px rgba(27, 167, 214, 0.24)) saturate(1.12);
+}
+
+.water-canal-chart-container .recharts-bar-rectangle:hover {
+  filter: drop-shadow(0 10px 16px rgba(14, 181, 240, 0.34)) saturate(1.2);
+}
+
+.water-canal-chart-container.has-selection .recharts-bar-rectangle {
+  opacity: 0.52;
+}
+
+.water-canal-chart-container.has-selection .recharts-bar-rectangle:hover {
+  opacity: 1;
+}
+
+.water-canal-tooltip {
+  position: relative;
+  z-index: 10000;
+  background: rgba(7, 30, 49, 0.94);
+  border: 1px solid rgba(133, 222, 255, 0.34);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(5px);
+}
+
+.water-canal-tooltip-title {
+  color: var(--wc-text);
+  font-weight: 700;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(126, 214, 255, 0.24);
+  padding-bottom: 6px;
+}
+
+.water-canal-tooltip-content {
+  font-size: 12px;
+}
+
+.water-canal-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0;
+}
+
+.water-canal-tooltip-label {
+  color: var(--wc-muted);
+}
+
+.water-canal-tooltip-value {
+  color: var(--wc-text);
+  font-weight: 600;
+}
+
+.water-canal-card .recharts-text,
+.water-canal-card .recharts-label,
+.water-canal-card .recharts-label-list text {
+  transition: fill 200ms ease;
+}
+
+html.light-theme .water-canal-card,
+html[data-theme="light"] .water-canal-card,
+body.light-theme .water-canal-card {
+  --wc-bg: #cadede;
+  --wc-bg-soft: #cadede;
+  --wc-surface: rgba(255, 255, 255, 0.86);
+  --wc-border: rgba(61, 87, 85, 0.2);
+  --wc-text: #3d5755;
+  --wc-muted: #3d5755;
+  --wc-accent: #c79d34;
+  --wc-accent-strong: #c79d34;
+  --wc-danger: #dc4f6c;
+  --wc-shadow: 0 0 0 rgba(23, 79, 108, 0);
+
+  background: #ffffff !important;
+  border-color: rgba(61, 87, 85, 0.2) !important;
+  box-shadow: none !important;
+}
+
+html.light-theme .water-canal-card::before,
+html[data-theme="light"] .water-canal-card::before,
+body.light-theme .water-canal-card::before {
+  background: transparent;
+  border-radius: inherit;
+  opacity: 1;
+}
+
+html.light-theme .water-canal-card::after,
+html[data-theme="light"] .water-canal-card::after,
+body.light-theme .water-canal-card::after {
+  background: transparent;
+  border-radius: inherit;
+}
+
+html.light-theme .water-canal-sort-button,
+html[data-theme="light"] .water-canal-sort-button,
+body.light-theme .water-canal-sort-button {
+  background: #3d5755;
+  border-color: #3d5755;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(61, 87, 85, 0.16);
+}
+
+html.light-theme .water-canal-sort-button:hover,
+html[data-theme="light"] .water-canal-sort-button:hover,
+body.light-theme .water-canal-sort-button:hover {
+  background: #c79d34;
+  border-color: #c79d34;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(199, 157, 52, 0.22);
+}
+
+html.light-theme .water-canal-sort-button.active,
+html[data-theme="light"] .water-canal-sort-button.active,
+body.light-theme .water-canal-sort-button.active {
+  color: #ffffff;
+  border-color: #c79d34;
+  background: #c79d34;
+}
+
+html.light-theme .water-canal-display-count,
+html[data-theme="light"] .water-canal-display-count,
+body.light-theme .water-canal-display-count {
+  color: #ffffff;
+  border-color: #3d5755;
+  background:
+    linear-gradient(180deg, #3d5755, #3d5755),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E")
+      no-repeat right 7px center / 10px;
+}
+
+html.light-theme .water-canal-display-count:hover,
+html[data-theme="light"] .water-canal-display-count:hover,
+body.light-theme .water-canal-display-count:hover,
+html.light-theme .water-canal-display-count:focus,
+html[data-theme="light"] .water-canal-display-count:focus,
+body.light-theme .water-canal-display-count:focus {
+  border-color: #c79d34;
+  box-shadow: 0 0 0 2px rgba(199, 157, 52, 0.2);
+}
+
+html.light-theme .water-canal-display-count option,
+html[data-theme="light"] .water-canal-display-count option,
+body.light-theme .water-canal-display-count option {
+  color: #3d5755;
+  background: #ffffff;
+}
+
+html.light-theme .water-canal-chart-container,
+html[data-theme="light"] .water-canal-chart-container,
+body.light-theme .water-canal-chart-container {
+  background: #e4edec !important;
+  border-color: rgba(61, 87, 85, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(61, 87, 85, 0.08) !important;
+}
+
+html.light-theme
+  .water-canal-chart-container
+  .recharts-bar-background-rectangle,
+html[data-theme="light"]
+  .water-canal-chart-container
+  .recharts-bar-background-rectangle,
+body.light-theme
+  .water-canal-chart-container
+  .recharts-bar-background-rectangle,
+html.light-theme
+  .water-canal-chart-container
+  .recharts-bar-background-rectangle.recharts-rectangle,
+html[data-theme="light"]
+  .water-canal-chart-container
+  .recharts-bar-background-rectangle.recharts-rectangle,
+body.light-theme
+  .water-canal-chart-container
+  .recharts-bar-background-rectangle.recharts-rectangle {
+  fill: #96a4b0 !important;
+}
+
+html.light-theme .water-canal-card .recharts-text,
+html[data-theme="light"] .water-canal-card .recharts-text,
+body.light-theme .water-canal-card .recharts-text,
+html.light-theme .water-canal-card .recharts-label,
+html[data-theme="light"] .water-canal-card .recharts-label,
+body.light-theme .water-canal-card .recharts-label,
+html.light-theme .water-canal-card .recharts-label-list text,
+html[data-theme="light"] .water-canal-card .recharts-label-list text,
+body.light-theme .water-canal-card .recharts-label-list text {
+  fill: #ffffff !important;
+}
+
+html.light-theme .water-canal-tooltip,
+html[data-theme="light"] .water-canal-tooltip,
+body.light-theme .water-canal-tooltip {
+  background: #cadede;
+  border-color: #3d5755;
+  box-shadow: 0 12px 24px rgba(61, 87, 85, 0.16);
+}
+
+html.light-theme .water-canal-tooltip-title,
+html[data-theme="light"] .water-canal-tooltip-title,
+body.light-theme .water-canal-tooltip-title {
+  color: #3d5755;
+  border-bottom-color: rgba(61, 87, 85, 0.42);
+}
+
+html.light-theme .water-canal-tooltip-content,
+html[data-theme="light"] .water-canal-tooltip-content,
+body.light-theme .water-canal-tooltip-content,
+html.light-theme .water-canal-tooltip-label,
+html[data-theme="light"] .water-canal-tooltip-label,
+body.light-theme .water-canal-tooltip-label,
+html.light-theme .water-canal-tooltip-value,
+html[data-theme="light"] .water-canal-tooltip-value,
+body.light-theme .water-canal-tooltip-value {
+  color: #3d5755;
+}
+
+html.light-theme .water-canal-tooltip-row + .water-canal-tooltip-row,
+html[data-theme="light"] .water-canal-tooltip-row + .water-canal-tooltip-row,
+body.light-theme .water-canal-tooltip-row + .water-canal-tooltip-row {
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+html.light-theme .water-canal-loading-container,
+html[data-theme="light"] .water-canal-loading-container,
+body.light-theme .water-canal-loading-container,
+html.light-theme .water-canal-error,
+html[data-theme="light"] .water-canal-error,
+body.light-theme .water-canal-error,
+html.light-theme .water-canal-no-data,
+html[data-theme="light"] .water-canal-no-data,
+body.light-theme .water-canal-no-data {
+  background: rgba(24, 84, 117, 0.5);
+  border-color: rgba(145, 222, 255, 0.3);
+}
+
+html.light-theme .water-canal-card .recharts-text,
+html[data-theme="light"] .water-canal-card .recharts-text,
+body.light-theme .water-canal-card .recharts-text,
+html.light-theme .water-canal-card .recharts-label,
+html[data-theme="light"] .water-canal-card .recharts-label,
+body.light-theme .water-canal-card .recharts-label,
+html.light-theme .water-canal-card .recharts-label-list text,
+html[data-theme="light"] .water-canal-card .recharts-label-list text,
+body.light-theme .water-canal-card .recharts-label-list text {
+  fill: #f5fcff !important;
+}
+
+html.dark-theme .water-canal-card .recharts-text,
+html[data-theme="dark"] .water-canal-card .recharts-text,
+body.dark-theme .water-canal-card .recharts-text,
+html.dark-theme .water-canal-card .recharts-label,
+html[data-theme="dark"] .water-canal-card .recharts-label,
+body.dark-theme .water-canal-card .recharts-label,
+html.dark-theme .water-canal-card .recharts-label-list text,
+html[data-theme="dark"] .water-canal-card .recharts-label-list text,
+body.dark-theme .water-canal-card .recharts-label-list text {
+  fill: #e7f7ff !important;
+}
+
+html.light-theme .water-canal-card .water-bar-value-text,
+html[data-theme="light"] .water-canal-card .water-bar-value-text,
+body.light-theme .water-canal-card .water-bar-value-text,
+html.light-theme .water-canal-card .water-bar-value-text.selected,
+html[data-theme="light"] .water-canal-card .water-bar-value-text.selected,
+body.light-theme .water-canal-card .water-bar-value-text.selected {
+  fill: #3d5755 !important;
+}
+
+.water-canal-card .recharts-label-list text,
+.water-canal-card .recharts-text {
+  stroke: rgba(4, 24, 39, 0.38);
+  stroke-width: 0.45px;
+  paint-order: stroke;
+}
+
+.water-canal-card .water-bar-name-text {
+  fill: #ffffff !important;
+  stroke: rgba(4, 24, 39, 0.35) !important;
+  stroke-width: 0.25px !important;
+}
+
+.water-canal-card .water-bar-name-tspan {
+  fill: #ffffff !important;
+}
+
+.water-canal-card .water-bar-name-tspan.selected {
+  fill: #ffffff !important;
+}
+
+.water-canal-card .water-bar-value-text {
+  fill: #ffffff !important;
+}
+
+.water-canal-card .water-bar-value-text.selected {
+  fill: #ffffff !important;
+}
+
+html:not(.light-theme) .water-canal-card .water-bar-name-tspan.selected,
+html[data-theme="dark"] .water-canal-card .water-bar-name-tspan.selected,
+body:not(.light-theme) .water-canal-card .water-bar-name-tspan.selected,
+html:not(.light-theme) .water-canal-card .water-bar-value-text.selected,
+html[data-theme="dark"] .water-canal-card .water-bar-value-text.selected,
+body:not(.light-theme) .water-canal-card .water-bar-value-text.selected {
+  fill: #129dde !important;
+}
+
+html.light-theme .water-canal-card .water-bar-name-tspan.selected,
+html[data-theme="light"] .water-canal-card .water-bar-name-tspan.selected,
+body.light-theme .water-canal-card .water-bar-name-tspan.selected,
+html.light-theme .water-canal-card .water-bar-value-text.selected,
+html[data-theme="light"] .water-canal-card .water-bar-value-text.selected,
+body.light-theme .water-canal-card .water-bar-value-text.selected {
+  fill: #3d5755 !important;
+}
+
+html.light-theme .water-canal-card text.water-bar-value-text,
+html[data-theme="light"] .water-canal-card text.water-bar-value-text,
+body.light-theme .water-canal-card text.water-bar-value-text,
+html.light-theme .water-canal-card text.water-bar-value-text.selected,
+html[data-theme="light"] .water-canal-card text.water-bar-value-text.selected,
+body.light-theme .water-canal-card text.water-bar-value-text.selected {
+  fill: #3d5755 !important;
+}
+
+.water-canal-chart-container .recharts-active-bar,
+.water-canal-chart-container .recharts-active-bar *,
+.water-canal-chart-container .recharts-active-dot,
+.water-canal-chart-container .recharts-active-shape,
+.water-canal-chart-container .recharts-active-shape *,
+.water-canal-chart-container .recharts-bar-rectangle:focus,
+.water-canal-chart-container .recharts-rectangle:focus,
+.water-canal-chart-container .recharts-layer:focus,
+.water-canal-chart-container svg [tabindex]:focus {
+  outline: none !important;
+  stroke: none !important;
+  stroke-width: 0 !important;
+  fill: transparent !important;
+  opacity: 0 !important;
+}
+
+@keyframes wc-wave {
+  0% {
+    transform: translateX(-8%) rotate(0deg);
+  }
+  50% {
+    transform: translateX(6%) rotate(3deg);
+  }
+  100% {
+    transform: translateX(-8%) rotate(0deg);
+  }
+}
+
+@keyframes wc-sweep {
+  0%,
+  12% {
+    transform: translateX(-160%);
+    opacity: 0;
+  }
+  24%,
+  56% {
+    transform: translateX(360%);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(360%);
+    opacity: 0;
+  }
+}
+
+@keyframes wc-shimmer {
+  0%,
+  12% {
+    transform: translateX(-180%);
+    opacity: 0;
+  }
+  24%,
+  56% {
+    transform: translateX(380%);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(380%);
+    opacity: 0;
+  }
+}
+
+@keyframes wc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wc-bar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scaleX(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .water-canal-card,
+  .water-canal-card::before,
+  .water-canal-card::after,
+  .water-canal-chart-container,
+  .water-canal-chart-container::after,
+  .water-canal-sort-button,
+  .recharts-bar-rectangle {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

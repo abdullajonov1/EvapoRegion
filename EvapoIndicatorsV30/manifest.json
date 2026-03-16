@@ -1,0 +1,24 @@
+{
+  "name": "EvapoIndicatorsV30",
+  "label": "EvapoIndicatorsV30",
+  "type": "widget",
+  "version": "1.0.0",
+  "exbVersion": "1.18.0",
+  "author": "Custom Developer",
+  "description": "Combined 4-in-1 indicator widget: Count, Area, Yield, Efficiency",
+  "copyright": "",
+  "license": "",
+  "properties": {},
+  "translatedLocales": ["en"],
+  "defaultSize": {
+    "width": 500,
+    "height": 250
+  },
+  "supports": {
+    "map": true
+  },
+  "dependency": ["jimu-arcgis"],
+  "supportInlineEditing": true,
+  "hasSettingPage": true,
+  "useDataSources": false
+}

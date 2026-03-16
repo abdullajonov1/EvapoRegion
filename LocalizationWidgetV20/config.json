@@ -1,0 +1,7 @@
+{
+  "enableMinMaxControl": true,
+  "enableColorRendererControl": true,
+  "enableRegionFilterControl": true,
+  "selectionPercentage": 10,
+  "polygonIdField": "GlobalID"
+}
