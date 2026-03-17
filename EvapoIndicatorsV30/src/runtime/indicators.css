@@ -348,7 +348,7 @@
 .indicator-pair-label {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: clamp(10px, calc(13px * var(--indicator-scale)), 15px);
+  font-size: 14px;
   font-weight: 600;
   color: #ffffff;
   line-height: 1.2;
@@ -403,6 +403,7 @@
 .indicator-pair-value .indicator-loading,
 .indicator-pair-value .indicator-error,
 .indicator-pair-value .indicator-placeholder {
+  font-size: 16px;
   text-align: right;
   max-width: none;
   overflow: visible;
@@ -429,7 +430,7 @@
 
 /* Fixed typography for count-area pair mode regardless of widget size */
 .indicators-container.single-indicator .indicator-pair-label {
-  font-size: 12px !important;
+  font-size: 14px !important;
   line-height: 1.2 !important;
 }
 
@@ -446,13 +447,13 @@
 .indicators-container.single-indicator
   .indicator-pair-value
   .indicator-placeholder {
-  font-size: 12px !important;
+  font-size: 16px !important;
 }
 
 .indicator-pair-value .indicator-placeholder,
 .indicator-pair-value .indicator-loading,
 .indicator-pair-value .indicator-error {
-  font-size: clamp(10px, calc(12px * var(--indicator-scale)), 14px);
+  font-size: 16px;
   max-width: 100%;
 }
 

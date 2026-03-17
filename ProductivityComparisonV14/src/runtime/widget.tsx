@@ -95,7 +95,7 @@ const SELECTION_LAYER_ID = "yield-water-selection-layer";
 // =============================================
 // LOCALIZATION - Import from local messages.ts
 // =============================================
-import { translateCropName } from "../../../EvapoRegionV20/EvapoCropV32/src/runtime/messages";
+import { translateCropName } from "../../../EvapoCropV32/src/runtime/messages";
 import {
   getInitialLang,
   LangCode,
