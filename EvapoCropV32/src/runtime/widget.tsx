@@ -2158,9 +2158,8 @@ export default class CropDistributionWidget extends React.PureComponent<
         console.log("[EvapoCrop] Zoom failed but filter is active");
       }
     } catch (error: any) {
-      this.setState({
-        error: `Error zooming to crop polygons: ${error.message}`,
-      });
+      // Zoom failure should not block the UI - just log it
+      console.warn("[EvapoCrop] Zoom failed (non-critical):", error.message);
     }
   };
 

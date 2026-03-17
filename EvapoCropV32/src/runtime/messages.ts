@@ -14,6 +14,12 @@ const MESSAGES: Bundle = {
     "evapoCrop.error": "Xatolik yuz berdi",
     "evapoCrop.unit.thousand": "ming",
     "evapoCrop.unit.million": "million",
+    "status.loading": "Yuklanmoqda...",
+    "status.error": "Xatolik yuz berdi",
+    "status.noData": "Ma'lumot topilmadi",
+    "status.connecting": "Ulanmoqda...",
+    "button.retry": "Qayta urinish",
+    "button.refresh": "Yangilash",
   },
   uz_cyrl: {
     "evapoCrop.title": "Экинлар",
@@ -24,6 +30,12 @@ const MESSAGES: Bundle = {
     "evapoCrop.error": "Хатолик юз берди",
     "evapoCrop.unit.thousand": "минг",
     "evapoCrop.unit.million": "миллион",
+    "status.loading": "Юкланмоқда...",
+    "status.error": "Хатолик юз берди",
+    "status.noData": "Маълумот топилмади",
+    "status.connecting": "Уланмоқда...",
+    "button.retry": "Қайта уриниш",
+    "button.refresh": "Янгилаш",
   },
   ru: {
     "evapoCrop.title": "Культуры",
@@ -34,6 +46,12 @@ const MESSAGES: Bundle = {
     "evapoCrop.error": "Произошла ошибка",
     "evapoCrop.unit.thousand": "тысяч",
     "evapoCrop.unit.million": "миллион",
+    "status.loading": "Загрузка...",
+    "status.error": "Произошла ошибка",
+    "status.noData": "Данные не найдены",
+    "status.connecting": "Подключение...",
+    "button.retry": "Повторить",
+    "button.refresh": "Обновить",
   },
 };
 

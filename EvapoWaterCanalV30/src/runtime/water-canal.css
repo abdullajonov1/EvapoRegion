@@ -586,18 +586,6 @@ body.light-theme
   fill: #96a4b0 !important;
 }
 
-html.light-theme .water-canal-card .recharts-text,
-html[data-theme="light"] .water-canal-card .recharts-text,
-body.light-theme .water-canal-card .recharts-text,
-html.light-theme .water-canal-card .recharts-label,
-html[data-theme="light"] .water-canal-card .recharts-label,
-body.light-theme .water-canal-card .recharts-label,
-html.light-theme .water-canal-card .recharts-label-list text,
-html[data-theme="light"] .water-canal-card .recharts-label-list text,
-body.light-theme .water-canal-card .recharts-label-list text {
-  fill: #ffffff !important;
-}
-
 html.light-theme .water-canal-tooltip,
 html[data-theme="light"] .water-canal-tooltip,
 body.light-theme .water-canal-tooltip {
@@ -645,39 +633,6 @@ body.light-theme .water-canal-no-data {
   border-color: rgba(145, 222, 255, 0.3);
 }
 
-html.light-theme .water-canal-card .recharts-text,
-html[data-theme="light"] .water-canal-card .recharts-text,
-body.light-theme .water-canal-card .recharts-text,
-html.light-theme .water-canal-card .recharts-label,
-html[data-theme="light"] .water-canal-card .recharts-label,
-body.light-theme .water-canal-card .recharts-label,
-html.light-theme .water-canal-card .recharts-label-list text,
-html[data-theme="light"] .water-canal-card .recharts-label-list text,
-body.light-theme .water-canal-card .recharts-label-list text {
-  fill: #f5fcff !important;
-}
-
-html.dark-theme .water-canal-card .recharts-text,
-html[data-theme="dark"] .water-canal-card .recharts-text,
-body.dark-theme .water-canal-card .recharts-text,
-html.dark-theme .water-canal-card .recharts-label,
-html[data-theme="dark"] .water-canal-card .recharts-label,
-body.dark-theme .water-canal-card .recharts-label,
-html.dark-theme .water-canal-card .recharts-label-list text,
-html[data-theme="dark"] .water-canal-card .recharts-label-list text,
-body.dark-theme .water-canal-card .recharts-label-list text {
-  fill: #e7f7ff !important;
-}
-
-html.light-theme .water-canal-card .water-bar-value-text,
-html[data-theme="light"] .water-canal-card .water-bar-value-text,
-body.light-theme .water-canal-card .water-bar-value-text,
-html.light-theme .water-canal-card .water-bar-value-text.selected,
-html[data-theme="light"] .water-canal-card .water-bar-value-text.selected,
-body.light-theme .water-canal-card .water-bar-value-text.selected {
-  fill: #3d5755 !important;
-}
-
 .water-canal-card .recharts-label-list text,
 .water-canal-card .recharts-text {
   stroke: rgba(4, 24, 39, 0.38);
@@ -686,52 +641,26 @@ body.light-theme .water-canal-card .water-bar-value-text.selected {
 }
 
 .water-canal-card .water-bar-name-text {
-  fill: #ffffff !important;
   stroke: rgba(4, 24, 39, 0.35) !important;
   stroke-width: 0.25px !important;
 }
 
-.water-canal-card .water-bar-name-tspan {
-  fill: #ffffff !important;
-}
-
-.water-canal-card .water-bar-name-tspan.selected {
-  fill: #ffffff !important;
-}
-
+.water-canal-card .water-bar-name-text,
+.water-canal-card .water-bar-name-tspan,
 .water-canal-card .water-bar-value-text {
-  fill: #ffffff !important;
+  transition: fill 200ms ease;
 }
 
-.water-canal-card .water-bar-value-text.selected {
-  fill: #ffffff !important;
-}
-
-html:not(.light-theme) .water-canal-card .water-bar-name-tspan.selected,
-html[data-theme="dark"] .water-canal-card .water-bar-name-tspan.selected,
-body:not(.light-theme) .water-canal-card .water-bar-name-tspan.selected,
-html:not(.light-theme) .water-canal-card .water-bar-value-text.selected,
-html[data-theme="dark"] .water-canal-card .water-bar-value-text.selected,
-body:not(.light-theme) .water-canal-card .water-bar-value-text.selected {
-  fill: #129dde !important;
-}
-
+html.light-theme .water-canal-card .water-bar-name-text,
+html[data-theme="light"] .water-canal-card .water-bar-name-text,
+body.light-theme .water-canal-card .water-bar-name-text,
+html.light-theme .water-canal-card .water-bar-name-tspan,
+html[data-theme="light"] .water-canal-card .water-bar-name-tspan,
+body.light-theme .water-canal-card .water-bar-name-tspan,
 html.light-theme .water-canal-card .water-bar-name-tspan.selected,
 html[data-theme="light"] .water-canal-card .water-bar-name-tspan.selected,
-body.light-theme .water-canal-card .water-bar-name-tspan.selected,
-html.light-theme .water-canal-card .water-bar-value-text.selected,
-html[data-theme="light"] .water-canal-card .water-bar-value-text.selected,
-body.light-theme .water-canal-card .water-bar-value-text.selected {
-  fill: #3d5755 !important;
-}
-
-html.light-theme .water-canal-card text.water-bar-value-text,
-html[data-theme="light"] .water-canal-card text.water-bar-value-text,
-body.light-theme .water-canal-card text.water-bar-value-text,
-html.light-theme .water-canal-card text.water-bar-value-text.selected,
-html[data-theme="light"] .water-canal-card text.water-bar-value-text.selected,
-body.light-theme .water-canal-card text.water-bar-value-text.selected {
-  fill: #3d5755 !important;
+body.light-theme .water-canal-card .water-bar-name-tspan.selected {
+  fill: #ffffff !important;
 }
 
 .water-canal-chart-container .recharts-active-bar,
@@ -745,9 +674,6 @@ body.light-theme .water-canal-card text.water-bar-value-text.selected {
 .water-canal-chart-container svg [tabindex]:focus {
   outline: none !important;
   stroke: none !important;
-  stroke-width: 0 !important;
-  fill: transparent !important;
-  opacity: 0 !important;
 }
 
 @keyframes wc-wave {

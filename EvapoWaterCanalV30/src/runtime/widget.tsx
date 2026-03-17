@@ -1186,7 +1186,14 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         ),
         selectedCanal: canalName || null,
         selectedCanalSnapshot: canalName
-          ? this.state.selectedCanalSnapshot
+          ? this.state.canalData.canals.find(
+              (c) => c.kanal_nomi === canalName,
+            ) ||
+            this.state.selectedCanalSnapshot || {
+              kanal_nomi: canalName,
+              total_supply_m3: 0,
+              percentage: 0,
+            }
           : null,
       },
       () => {
@@ -1319,7 +1326,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
   };
 
   private onPopState = (): void => {
-    this.readFiltersFromUrl(true);
+    this.readFiltersFromUrl(false);
   };
 
   private readFiltersFromUrl(includeSelectionFromUrl = false): void {
@@ -1345,9 +1352,11 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
             this.state.yil ||
             DEFAULT_INITIAL_YEAR,
           minMax: p.get("min_max") || null,
-          selectedSource: waterSourceFromUrl,
-          selectedCanal: canalFromUrl,
-          selectedWaterSource: waterSourceFromUrl || "",
+          selectedSource: includeSelectionFromUrl ? waterSourceFromUrl : null,
+          selectedCanal: includeSelectionFromUrl ? canalFromUrl : null,
+          selectedWaterSource: includeSelectionFromUrl
+            ? waterSourceFromUrl || ""
+            : "",
         },
         () => {
           if (viewType === "waterSource") {
@@ -1528,7 +1537,6 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       let newSelected: string | null = null;
       let newSelectedSnapshot: WaterSource | null =
         this.state.selectedSourceSnapshot;
-      const isMinMaxActive = !!(minMax && String(minMax).trim());
       const resolvedSelectedSource = this.resolveRawNameFromList(
         "source",
         this.state.selectedSource,
@@ -1541,7 +1549,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         newSelected = resolvedSelectedSource;
         newSelectedSnapshot =
           sources.find((s) => s.manba_nomi === resolvedSelectedSource) ?? null;
-      } else if (resolvedSelectedSource && isMinMaxActive) {
+      } else if (resolvedSelectedSource) {
         newSelected = resolvedSelectedSource;
         if (!newSelectedSnapshot) {
           newSelectedSnapshot = {
@@ -1641,7 +1649,6 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
 
       let newSelected: string | null = null;
       let newSelectedSnapshot: Canal | null = this.state.selectedCanalSnapshot;
-      const isMinMaxActive = !!(minMax && String(minMax).trim());
       const resolvedSelectedCanal = this.resolveRawNameFromList(
         "canal",
         this.state.selectedCanal,
@@ -1655,7 +1662,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         newSelected = resolvedSelectedCanal;
         newSelectedSnapshot =
           canals.find((c) => c.kanal_nomi === resolvedSelectedCanal) ?? null;
-      } else if (resolvedSelectedCanal && isMinMaxActive) {
+      } else if (resolvedSelectedCanal) {
         newSelected = resolvedSelectedCanal;
         if (!newSelectedSnapshot) {
           newSelectedSnapshot = {
@@ -1852,13 +1859,8 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     const { selectedSource, selectedCanal, minMax } = this.state;
     const viewType = this.props.config?.viewType || "waterSource";
     const params = new URLSearchParams(window.location.search);
-    if (viewType === "waterSource") {
-      if (selectedSource) params.set("water_source", selectedSource);
-      else params.delete("water_source");
-    } else {
-      if (selectedCanal) params.set("canal_name", selectedCanal);
-      else params.delete("canal_name");
-    }
+    params.delete("water_source");
+    params.delete("canal_name");
     if (minMax) params.set("min_max", minMax);
     else params.delete("min_max");
     const newUrl = `${window.location.pathname}?${params.toString()}`;
@@ -2045,35 +2047,31 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     if (viewType === "waterSource") {
       const { sources } = sourceData;
       const sorted = this.getSortedWaterSources(sources, sourceSortOrder);
-      const isMinMaxActive = !!(
-        this.state.minMax && String(this.state.minMax).trim()
-      );
       const selectedSourceName = selectedSource || "";
-      const sourceDisplayOrdered =
-        isMinMaxActive && selectedSourceName
-          ? (() => {
-              const selectedEntry = sorted.find(
-                (s) => s.manba_nomi === selectedSourceName,
-              );
-              const pinnedEntry =
-                selectedEntry ||
-                (this.state.selectedSourceSnapshot?.manba_nomi ===
-                selectedSourceName
-                  ? this.state.selectedSourceSnapshot
-                  : {
-                      manba_nomi: selectedSourceName,
-                      total_supply_m3: 0,
-                      percentage: 0,
-                    });
+      const sourceDisplayOrdered = selectedSourceName
+        ? (() => {
+            const selectedEntry = sorted.find(
+              (s) => s.manba_nomi === selectedSourceName,
+            );
+            const pinnedEntry =
+              selectedEntry ||
+              (this.state.selectedSourceSnapshot?.manba_nomi ===
+              selectedSourceName
+                ? this.state.selectedSourceSnapshot
+                : {
+                    manba_nomi: selectedSourceName,
+                    total_supply_m3: 0,
+                    percentage: 0,
+                  });
 
-              if (!pinnedEntry) return sorted;
+            if (!pinnedEntry) return sorted;
 
-              const rest = sorted.filter(
-                (s) => s.manba_nomi !== selectedSourceName,
-              );
-              return [pinnedEntry, ...rest];
-            })()
-          : sorted;
+            const rest = sorted.filter(
+              (s) => s.manba_nomi !== selectedSourceName,
+            );
+            return [pinnedEntry, ...rest];
+          })()
+        : sorted;
 
       const limited = sourceDisplayOrdered.slice(0, sourceDisplayCount);
       const waterMax = Math.max(
@@ -2279,7 +2277,9 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
                                 fontWeight={isSelected ? 700 : 500}
                                 fill={
                                   isSelected
-                                    ? selectedLabelTextColor
+                                    ? isDarkTheme
+                                      ? selectedLabelTextColor
+                                      : "#ffffff"
                                     : "#ffffff"
                                 }
                               >
@@ -2355,31 +2355,29 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     );
     const selectedCanalName = selectedCanal || "";
 
-    const canalDisplayOrdered =
-      isMinMaxActive && selectedCanalName
-        ? (() => {
-            const selectedEntry = canalSorted.find(
-              (c) => c.kanal_nomi === selectedCanalName,
-            );
-            const pinnedEntry =
-              selectedEntry ||
-              (this.state.selectedCanalSnapshot?.kanal_nomi ===
-              selectedCanalName
-                ? this.state.selectedCanalSnapshot
-                : {
-                    kanal_nomi: selectedCanalName,
-                    total_supply_m3: 0,
-                    percentage: 0,
-                  });
+    const canalDisplayOrdered = selectedCanalName
+      ? (() => {
+          const selectedEntry = canalSorted.find(
+            (c) => c.kanal_nomi === selectedCanalName,
+          );
+          const pinnedEntry =
+            selectedEntry ||
+            (this.state.selectedCanalSnapshot?.kanal_nomi === selectedCanalName
+              ? this.state.selectedCanalSnapshot
+              : {
+                  kanal_nomi: selectedCanalName,
+                  total_supply_m3: 0,
+                  percentage: 0,
+                });
 
-            if (!pinnedEntry) return canalSorted;
+          if (!pinnedEntry) return canalSorted;
 
-            const rest = canalSorted.filter(
-              (c) => c.kanal_nomi !== selectedCanalName,
-            );
-            return [pinnedEntry, ...rest];
-          })()
-        : canalSorted;
+          const rest = canalSorted.filter(
+            (c) => c.kanal_nomi !== selectedCanalName,
+          );
+          return [pinnedEntry, ...rest];
+        })()
+      : canalSorted;
 
     const canalLimited = canalDisplayOrdered
       .slice(0, canalDisplayCount)
@@ -2575,7 +2573,11 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
                               fontSize={nameFontSize}
                               fontWeight={isSelected ? 700 : 500}
                               fill={
-                                isSelected ? selectedLabelTextColor : "#ffffff"
+                                isSelected
+                                  ? isDarkTheme
+                                    ? selectedLabelTextColor
+                                    : "#ffffff"
+                                  : "#ffffff"
                               }
                             >
                               <tspan
