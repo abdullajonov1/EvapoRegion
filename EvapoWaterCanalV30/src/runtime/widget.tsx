@@ -1159,6 +1159,10 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     }
 
     const viewType = this.props.config?.viewType || "waterSource";
+    if (viewType === "waterSource") {
+      // Water-source view should not react to canal selection events.
+      return;
+    }
     const rawCanalName = d.kanal_nomi ?? d.canalName ?? null;
     const canalName = this.resolveRawName("canal", rawCanalName);
     const rawTimestamp = Number(d.timestamp);
@@ -1197,11 +1201,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
           : null,
       },
       () => {
-        // Water source view refreshes when a canal is selected
-        // Canal view ignores this (it only displays canals for current water source)
-        if (viewType === "waterSource") {
-          this.scheduleExternalDataFetch();
-        }
+        // Canal view keeps local selection state only.
       },
     );
   };
@@ -2277,14 +2277,17 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
                                 fontWeight={isSelected ? 700 : 500}
                                 fill={
                                   isSelected
-                                    ? isDarkTheme
-                                      ? selectedLabelTextColor
-                                      : "#ffffff"
+                                    ? selectedLabelTextColor
                                     : "#ffffff"
                                 }
                               >
                                 <tspan
                                   className={`water-bar-name-tspan ${isSelected ? "selected" : ""}`}
+                                  fill={
+                                    isSelected
+                                      ? selectedLabelTextColor
+                                      : "#ffffff"
+                                  }
                                 >
                                   {shown}
                                 </tspan>
@@ -2573,15 +2576,16 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
                               fontSize={nameFontSize}
                               fontWeight={isSelected ? 700 : 500}
                               fill={
-                                isSelected
-                                  ? isDarkTheme
-                                    ? selectedLabelTextColor
-                                    : "#ffffff"
-                                  : "#ffffff"
+                                isSelected ? selectedLabelTextColor : "#ffffff"
                               }
                             >
                               <tspan
                                 className={`water-bar-name-tspan ${isSelected ? "selected" : ""}`}
+                                fill={
+                                  isSelected
+                                    ? selectedLabelTextColor
+                                    : "#ffffff"
+                                }
                               >
                                 {shown}
                               </tspan>

@@ -412,16 +412,8 @@
   filter: drop-shadow(0 6px 10px rgba(27, 167, 214, 0.24)) saturate(1.12);
 }
 
-.water-canal-chart-container .recharts-bar-rectangle:hover {
-  filter: drop-shadow(0 10px 16px rgba(14, 181, 240, 0.34)) saturate(1.2);
-}
-
 .water-canal-chart-container.has-selection .recharts-bar-rectangle {
   opacity: 0.52;
-}
-
-.water-canal-chart-container.has-selection .recharts-bar-rectangle:hover {
-  opacity: 1;
 }
 
 .water-canal-tooltip {
@@ -649,18 +641,6 @@ body.light-theme .water-canal-no-data {
 .water-canal-card .water-bar-name-tspan,
 .water-canal-card .water-bar-value-text {
   transition: fill 200ms ease;
-}
-
-html.light-theme .water-canal-card .water-bar-name-text,
-html[data-theme="light"] .water-canal-card .water-bar-name-text,
-body.light-theme .water-canal-card .water-bar-name-text,
-html.light-theme .water-canal-card .water-bar-name-tspan,
-html[data-theme="light"] .water-canal-card .water-bar-name-tspan,
-body.light-theme .water-canal-card .water-bar-name-tspan,
-html.light-theme .water-canal-card .water-bar-name-tspan.selected,
-html[data-theme="light"] .water-canal-card .water-bar-name-tspan.selected,
-body.light-theme .water-canal-card .water-bar-name-tspan.selected {
-  fill: #ffffff !important;
 }
 
 .water-canal-chart-container .recharts-active-bar,
