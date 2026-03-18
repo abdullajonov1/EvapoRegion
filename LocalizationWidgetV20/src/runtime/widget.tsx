@@ -68,7 +68,7 @@ interface LanguageSelectorState {
   externalPolygonFilter: string;
 }
 
-const LANGUAGES: { code: LangCode; nativeLabel: string }[] = [
+const LANGUAGE_OPTIONS = [
   { code: "uz_lat", nativeLabel: "O'zbek" },
   { code: "uz_cyrl", nativeLabel: "Ўзбек" },
   { code: "ru", nativeLabel: "Русский" },
@@ -478,6 +478,19 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     string,
     Record<string, string>
   > = {};
+  private _dirTranslationCache: Record<
+    LangCode,
+    {
+      region: Record<string, string>;
+      district: Record<string, string>;
+      months: Record<string, string>;
+    }
+  > = {
+    uz_lat: { region: {}, district: {}, months: {} },
+    uz_cyrl: { region: {}, district: {}, months: {} },
+    ru: { region: {}, district: {}, months: {} },
+  };
+  private _dirTranslationReqId = 0;
 
   constructor(props: AllWidgetProps<IMConfig>) {
     super(props);
@@ -589,6 +602,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         },
       }),
     );
+
+    void this.ensureDirectoryTranslationCache(initialLang);
 
     this.setupThemeObserver();
     this.readFiltersFromUrl();
@@ -788,7 +803,9 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     if (!this._isMounted) return;
     const lang = e?.detail?.lang || e?.detail?.language;
     if (lang && (lang === "uz_lat" || lang === "uz_cyrl" || lang === "ru")) {
-      this.setState({ currentLang: lang });
+      this.setState({ currentLang: lang }, () => {
+        void this.ensureDirectoryTranslationCache(lang);
+      });
     }
   };
 
@@ -796,7 +813,27 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     return String(value ?? "")
       .trim()
       .toLowerCase()
+      .replace(/[’ʻ`]/g, "'")
       .replace(/\s+/g, " ");
+  }
+
+  private escapeSqlLiteral(value: string): string {
+    return String(value ?? "").replace(/'/g, "''");
+  }
+
+  private getApostropheVariants(value: string): string[] {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const base = raw.replace(/[’`ʻ‘ʼ]/g, "'");
+    const variants = [
+      base,
+      base.replace(/'/g, "’"),
+      base.replace(/'/g, "`"),
+      base.replace(/'/g, "ʻ"),
+    ];
+
+    return Array.from(new Set(variants.map((v) => v.trim()).filter(Boolean)));
   }
 
   private getDirectoryLang(lang: LangCode): "uz" | "kir" | "ru" {
@@ -806,7 +843,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   }
 
   private async fetchDirectoryList(
-    key: "Canal" | "Canals",
+    key: "Canal" | "Canals" | "Region" | "District" | "Months",
     lang: "uz" | "kir" | "ru",
   ): Promise<string[]> {
     const typeCandidates = ["Evapo", "Evapo-RegionV20", "EvapoWaterCanalV20"];
@@ -837,6 +874,218 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
     return [];
   }
+
+  private buildTranslationMap = (
+    base: string[],
+    target: string[],
+  ): Record<string, string> => {
+    const out: Record<string, string> = {};
+    const n = Math.min(base.length, target.length);
+    for (let i = 0; i < n; i++) {
+      const from = this.normalizeLookupKey(base[i]);
+      const to = String(target[i] ?? "").trim();
+      if (from && to) out[from] = to;
+    }
+    return out;
+  };
+
+  private transliterateUzLatinToCyrillic = (input: string): string => {
+    let text = String(input ?? "");
+    const wordPairs: Array<[RegExp, string]> = [
+      [/O‘/g, "Ў"],
+      [/o‘/g, "ў"],
+      [/G‘/g, "Ғ"],
+      [/g‘/g, "ғ"],
+      [/Yo/g, "Ё"],
+      [/yo/g, "ё"],
+      [/Yu/g, "Ю"],
+      [/yu/g, "ю"],
+      [/Ya/g, "Я"],
+      [/ya/g, "я"],
+      [/Sh/g, "Ш"],
+      [/sh/g, "ш"],
+      [/Ch/g, "Ч"],
+      [/ch/g, "ч"],
+      [/Ng/g, "Нг"],
+      [/ng/g, "нг"],
+    ];
+    wordPairs.forEach(([re, to]) => {
+      text = text.replace(re, to);
+    });
+
+    const charMap: Record<string, string> = {
+      A: "А",
+      a: "а",
+      B: "Б",
+      b: "б",
+      D: "Д",
+      d: "д",
+      E: "Е",
+      e: "е",
+      F: "Ф",
+      f: "ф",
+      G: "Г",
+      g: "г",
+      H: "Ҳ",
+      h: "ҳ",
+      I: "И",
+      i: "и",
+      J: "Ж",
+      j: "ж",
+      K: "К",
+      k: "к",
+      L: "Л",
+      l: "л",
+      M: "М",
+      m: "м",
+      N: "Н",
+      n: "н",
+      O: "О",
+      o: "о",
+      P: "П",
+      p: "п",
+      Q: "Қ",
+      q: "қ",
+      R: "Р",
+      r: "р",
+      S: "С",
+      s: "с",
+      T: "Т",
+      t: "т",
+      U: "У",
+      u: "у",
+      V: "В",
+      v: "в",
+      X: "Х",
+      x: "х",
+      Y: "Й",
+      y: "й",
+      Z: "З",
+      z: "з",
+      "'": "",
+      "`": "",
+      "’": "",
+    };
+
+    return [...text].map((c) => charMap[c] ?? c).join("");
+  };
+
+  private async ensureDirectoryTranslationCache(lang: LangCode): Promise<void> {
+    if (lang === "uz_lat") return;
+
+    const existing = this._dirTranslationCache[lang];
+    if (
+      existing &&
+      (Object.keys(existing.region).length > 0 ||
+        Object.keys(existing.district).length > 0 ||
+        Object.keys(existing.months).length > 0)
+    ) {
+      return;
+    }
+
+    const reqId = ++this._dirTranslationReqId;
+    try {
+      const targetLang = this.getDirectoryLang(lang);
+      const [
+        uzRegions,
+        uzDistricts,
+        uzMonths,
+        targetRegions,
+        targetDistricts,
+        targetMonths,
+      ] = await Promise.all([
+        this.fetchDirectoryList("Region", "uz"),
+        this.fetchDirectoryList("District", "uz"),
+        this.fetchDirectoryList("Months", "uz"),
+        this.fetchDirectoryList("Region", targetLang),
+        this.fetchDirectoryList("District", targetLang),
+        this.fetchDirectoryList("Months", targetLang),
+      ]);
+
+      if (reqId !== this._dirTranslationReqId) return;
+
+      this._dirTranslationCache[lang] = {
+        region: this.buildTranslationMap(uzRegions, targetRegions),
+        district: this.buildTranslationMap(uzDistricts, targetDistricts),
+        months: this.buildTranslationMap(uzMonths, targetMonths),
+      };
+
+      if (this._isMounted) this.forceUpdate();
+    } catch {
+      this._dirTranslationCache[lang] = {
+        region: {},
+        district: {},
+        months: {},
+      };
+    }
+  }
+
+  private getLocalizedMavsumLabel = (rawValue: string): string => {
+    const value = String(rawValue ?? "").trim();
+    if (!value) return value;
+
+    const normalized = this.normalizeLookupKey(value);
+    const lang = this.state.currentLang;
+    if (lang === "uz_lat") return value;
+
+    const monthTranslated =
+      this._dirTranslationCache[lang]?.months?.[normalized];
+    if (monthTranslated) return monthTranslated;
+
+    const isUmumiy =
+      normalized === "umumiy" ||
+      normalized === "умумий" ||
+      normalized === "общий";
+    const isIkkilamchi =
+      normalized.includes("ikkilamchi") ||
+      normalized.includes("иккиламчи") ||
+      normalized.includes("вторич");
+    const isBirlamchi =
+      normalized.includes("birlamchi") ||
+      normalized.includes("бирламчи") ||
+      normalized.includes("первич");
+
+    if (lang === "uz_cyrl") {
+      if (isUmumiy) return "Умумий";
+      if (isIkkilamchi) return "Иккиламчи";
+      if (isBirlamchi) return "Бирламчи ва умуммавсумий";
+      return this.transliterateUzLatinToCyrillic(value);
+    }
+
+    if (isUmumiy) return "Общий";
+    if (isIkkilamchi) return "Вторичный";
+    if (isBirlamchi) return "Первичный и общесезонный";
+    return value;
+  };
+
+  private getLocalizedFilterValue = (
+    kind: "region" | "district" | "season",
+    rawValue: string,
+  ): string => {
+    const value = String(rawValue ?? "").trim();
+    if (!value) return value;
+
+    const lang = this.state.currentLang;
+    if (lang === "uz_lat") return value;
+
+    if (kind === "season") {
+      return this.getLocalizedMavsumLabel(value);
+    }
+
+    const normalized = this.normalizeLookupKey(value);
+    const map = this._dirTranslationCache[lang]?.[kind] || {};
+    return map[normalized] || value;
+  };
+
+  private getLocalizedRegionOptionLabel = (
+    key: RegionFilterKey,
+    value: string,
+  ): string => {
+    if (key === "viloyat") return this.getLocalizedFilterValue("region", value);
+    if (key === "tuman") return this.getLocalizedFilterValue("district", value);
+    if (key === "mavsum") return this.getLocalizedFilterValue("season", value);
+    return value;
+  };
 
   private async ensureCanalReverseTranslationCache(
     lang: LangCode,
@@ -946,15 +1195,89 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   };
 
   private handleCropSelection = (event: any): void => {
-    const cropType = event?.detail?.cropType;
-    const cropFilter = cropType
-      ? `ekin_turi='${String(cropType).replace(/'/g, "''")}'`
+    const cropType = String(event?.detail?.cropType ?? "").trim();
+    const variants = this.getApostropheVariants(cropType);
+
+    const cropFilter = variants.length
+      ? variants.length === 1
+        ? `ekin_turi='${this.escapeSqlLiteral(variants[0])}'`
+        : `(${variants
+            .map((v) => `ekin_turi='${this.escapeSqlLiteral(v)}'`)
+            .join(" OR ")})`
       : "";
 
     this.setState({ externalCropFilter: cropFilter }, () => {
+      // ✅ NEW: Validate if dependent filters (like kanal) still have data with new crop
+      void this.validateAndAdjustDependentFilters();
       this.refreshMinMaxOrMapFilters();
     });
   };
+
+  /**
+   * After a filter changes (crop, district, etc.), validate if dependent filters
+   * still have data. If not, auto-clear conflicting filters.
+   * Example: If crop=Beda is selected but kanal=SharqYulduzi9 has no Beda → clear kanal.
+   */
+  private async validateAndAdjustDependentFilters(): Promise<void> {
+    if (!this.regionFilterEngine) return;
+
+    const currentFilters = { ...this.state.filters };
+
+    // Check if current filter combination has data
+    const hasData =
+      await this.regionFilterEngine.checkFilterCombinationExists(
+        currentFilters,
+      );
+
+    if (hasData) {
+      // Current combination is valid, no adjustment needed
+      return;
+    }
+
+    // Current combination has NO data - need to clear something
+    // Strategy: clear the most recently changed filter to restore balance
+    // For now, clear fermer_nom if it was set, or kanal if external filter exists
+    const newFilters = { ...currentFilters };
+
+    // If kanal was filtered externally (from EvapoCropV32/EvapoWaterCanalV30),
+    // that's usually less important than region filters, so try clearing that first
+    if (newFilters.fermer_nom) {
+      console.log(
+        "[LocalizationV20] Clearing fermer_nom due to no data with current filters",
+      );
+      newFilters.fermer_nom = "";
+
+      // Re-validate after clearing fermer
+      const stillNoData =
+        !(await this.regionFilterEngine.checkFilterCombinationExists(
+          newFilters,
+        ));
+
+      if (stillNoData && this.state.filters.tuman) {
+        // If still no data, try clearing tuman as well (less common)
+        console.log(
+          "[LocalizationV20] Clearing tuman due to no data with current filters",
+        );
+        newFilters.tuman = "";
+      }
+    }
+
+    // Update state with adjusted filters
+    if (
+      this.getFilterSignature(newFilters) !==
+      this.getFilterSignature(currentFilters)
+    ) {
+      this.setState({ filters: newFilters });
+
+      // Broadcast the cleared filters to other widgets
+      document.dispatchEvent(
+        new CustomEvent("waterSupplyFilterChanged", {
+          detail: newFilters,
+          bubbles: true,
+        }),
+      );
+    }
+  }
 
   private handleExternalMinMaxPolygonSelection = (event: any): void => {
     const src = event?.detail?.source;
@@ -1033,6 +1356,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     afterUpdate?: (next: LocalFilterState) => void,
   ): void => {
     const prevYil = this.state.filters.yil;
+    const prevViloyat = this.state.filters.viloyat;
     const next: LocalFilterState = { ...this.state.filters, ...partial };
     if (
       this.getFilterSignature(next) ===
@@ -1041,19 +1365,94 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       return;
     this.minMaxEngine.cancel();
     this.colorRendererEngine.setYear(next.yil || "");
-    this.setState({ filters: next }, () => {
-      afterUpdate?.(next);
-      this.updateUrlWithFilters(next);
-      this.notifyFilterChange();
-      if (prevYil !== next.yil) this.notifyYearChange(next.yil);
-      if (!this.canUseMinMax()) this.resetMinMaxState();
-      else if (this.state.minActive || this.state.maxActive) {
-        this.notifyMinMaxPolygonSelection(null);
-        this.scheduleRefetch();
-      }
-      void this.applyMapFilters();
+
+    // ✅ NEW: Validate and adjust dependent filters if main filter changed
+    void this.validateAndClearDependentOnFilterChange(
+      this.state.filters,
+      next,
+    ).then((validatedNext) => {
+      this.setState({ filters: validatedNext }, () => {
+        afterUpdate?.(validatedNext);
+        this.updateUrlWithFilters(validatedNext);
+        this.notifyFilterChange();
+        if (prevYil !== validatedNext.yil)
+          this.notifyYearChange(validatedNext.yil);
+
+        // ⚠️ CRITICAL: If viloyat changed, clear min/max polygon
+        // (polygon from old viloyat is now outside new viloyat bounds)
+        const viloyatChanged = prevViloyat !== validatedNext.viloyat;
+        if (viloyatChanged && (this.state.minActive || this.state.maxActive)) {
+          console.log(
+            "[LocalizationV20] Clearing min/max due to viloyat change",
+          );
+          this.resetMinMaxState();
+        } else if (!this.canUseMinMax()) {
+          this.resetMinMaxState();
+        } else if (this.state.minActive || this.state.maxActive) {
+          this.notifyMinMaxPolygonSelection(null);
+          this.scheduleRefetch();
+        }
+        void this.applyMapFilters();
+      });
     });
   };
+
+  /**
+   * When a main filter (viloyat, tuman) changes, validate that dependent filters
+   * (fermer_nom, etc.) still have data. If not, clear the dependent filters.
+   *
+   * Example: viloyat changes → check if tuman still exists in new viloyat
+   *          if not, clear tuman and fermer_nom
+   */
+  private async validateAndClearDependentOnFilterChange(
+    prevFilters: LocalFilterState,
+    nextFilters: LocalFilterState,
+  ): Promise<LocalFilterState> {
+    if (!this.regionFilterEngine) return nextFilters;
+
+    // Check which filter changed (main filter vs dependent)
+    const mainChanged =
+      prevFilters.viloyat !== nextFilters.viloyat ||
+      prevFilters.tuman !== nextFilters.tuman;
+
+    if (!mainChanged) return nextFilters; // Only dependent changed, no cascade needed
+
+    const result = { ...nextFilters };
+
+    // Strategy: If viloyat changed, check if new viloyat still has the selected tuman
+    if (prevFilters.viloyat !== nextFilters.viloyat && result.tuman) {
+      const tumanExists =
+        await this.regionFilterEngine.checkFilterCombinationExists({
+          ...result,
+          fermer_nom: "", // Ignore fermer when checking tuman
+        });
+
+      if (!tumanExists) {
+        console.log(
+          "[LocalizationV20] Clearing tuman due to viloyat change - tuman not in new viloyat",
+        );
+        result.tuman = "";
+        result.fermer_nom = "";
+      }
+    }
+
+    // If tuman changed, check if new tuman still has the selected fermer_nom
+    if (prevFilters.tuman !== nextFilters.tuman && result.fermer_nom) {
+      const farmerExists =
+        await this.regionFilterEngine.checkFilterCombinationExists({
+          ...result,
+        });
+
+      if (!farmerExists) {
+        console.log(
+          "[LocalizationV20] Clearing fermer_nom due to tuman change - fermer not in new tuman",
+        );
+        result.fermer_nom = "";
+      }
+    }
+
+    return result;
+  }
 
   private updateUrlWithFilters = (
     filters: LocalFilterState = this.state.filters,
@@ -1725,7 +2124,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     // Match Evapo-RegionV31 handler behavior:
     // - yil change: PRESERVE viloyat/tuman/mavsum (just reload options)
     // - viloyat change: clear tuman (dependent), preserve mavsum
-    // - tuman change: nothing else cleared
+    // - tuman change: RESET ALL dependent filters (crop, canal, source, min/max)
     // - mavsum change: nothing else cleared
     const nextPartial: Partial<LocalFilterState> =
       key === "yil"
@@ -1738,10 +2137,121 @@ export default class LanguageSelectorV20 extends React.PureComponent<
               ? { mavsum: value, fermer_nom: "" }
               : { fermer_nom: value };
 
-    this.updateFilter(nextPartial, (nextFilters) => {
-      this.setState({ openRegionFilterMenuKey: null, farmerSearchText: "" });
-      void this.refreshRegionFilterOptions(nextFilters);
-      void this.applyMapFilters();
+    // Special handling: tuman or fermer_nom change → reset all dependent filters
+    if (key === "tuman") {
+      this.handleTumanChange(value, nextPartial);
+    } else if (key === "fermer_nom") {
+      this.handleFermerChange(value, nextPartial);
+    } else {
+      this.updateFilter(nextPartial, (nextFilters) => {
+        this.setState({ openRegionFilterMenuKey: null, farmerSearchText: "" });
+        void this.refreshRegionFilterOptions(nextFilters);
+        void this.applyMapFilters();
+      });
+    }
+  };
+
+  /**
+   * Shared logic: clear all external filters and broadcast clear events.
+   * Called when tuman or fermer_nom changes.
+   */
+  private resetExternalFilters = (
+    reason: string,
+    callback: () => void,
+  ): void => {
+    this.minMaxEngine.cancel();
+    this.clearRefetchTimer();
+    this.setState(
+      {
+        openRegionFilterMenuKey: null,
+        farmerSearchText: "",
+        externalCropFilter: "",
+        externalCanalFilter: "",
+        externalSourceFilter: "",
+        externalPolygonFilter: "",
+        minActive: false,
+        maxActive: false,
+        minPolygonIds: [],
+        maxPolygonIds: [],
+        minMaxError: null,
+      },
+      () => {
+        document.dispatchEvent(
+          new CustomEvent("clearCropSelection", {
+            detail: { source: "EvapoWidget", timestamp: Date.now(), reason },
+            bubbles: true,
+          }),
+        );
+        document.dispatchEvent(
+          new CustomEvent("clearCanalSelection", {
+            detail: { source: "EvapoWidget", timestamp: Date.now(), reason },
+            bubbles: true,
+          }),
+        );
+        document.dispatchEvent(
+          new CustomEvent("clearWaterSourceSelection", {
+            detail: { source: "EvapoWidget", timestamp: Date.now(), reason },
+            bubbles: true,
+          }),
+        );
+        document.dispatchEvent(
+          new CustomEvent("regionDependentFiltersReset", {
+            detail: { source: "EvapoWidget", timestamp: Date.now(), reason },
+            bubbles: true,
+          }),
+        );
+        // notifyFilterChange() is intentionally omitted here — updateFilter (called
+        // from callback below) will broadcast the new tuman/fermer to dependent widgets.
+        this.notifyMinMaxPolygonSelection(null);
+        this.notifyMinMaxSelection(null, "none");
+        callback();
+      },
+    );
+  };
+
+  /**
+   * When tuman changes, reset all dependent external filters (crop, canal, source)
+   * and clear min/max polygon. This shows all available data for the selected tuman.
+   */
+  private handleTumanChange = (
+    tumanValue: string,
+    nextPartial: Partial<LocalFilterState>,
+  ): void => {
+    const prevTuman = this.state.filters.tuman;
+
+    // Only reset if actually changing tuman
+    if (tumanValue === prevTuman) return;
+
+    // Clear external filters FIRST so that updateFilter's own notifyFilterChange()
+    // and applyMapFilters() broadcasts see the already-clean state (no stale crop/canal/source).
+    // This also correctly handles "no tuman → first tuman" selection.
+    this.resetExternalFilters("tumanChanged", () => {
+      this.updateFilter(nextPartial, (nextFilters) => {
+        void this.refreshRegionFilterOptions(nextFilters);
+        void this.applyMapFilters();
+      });
+    });
+  };
+
+  /**
+   * When fermer_nom changes, reset all dependent external filters (crop, canal, source)
+   * and clear min/max polygon. This shows all available data for the selected farmer.
+   */
+  private handleFermerChange = (
+    fermerValue: string,
+    nextPartial: Partial<LocalFilterState>,
+  ): void => {
+    const prevFermer = this.state.filters.fermer_nom;
+
+    // Only reset if actually changing fermer
+    if (fermerValue === prevFermer) return;
+
+    // Same pattern: clear external filters first, then update fermer filter.
+    this.resetExternalFilters("fermerChanged", () => {
+      this.updateFilter(nextPartial, (nextFilters) => {
+        void this.refreshRegionFilterOptions(nextFilters);
+        void this.applyMapFilters();
+      });
     });
   };
 
@@ -1793,6 +2303,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
 
     this.setState({ currentLang: lang, showLanguageDropdown: false }, () => {
+      void this.ensureDirectoryTranslationCache(lang);
+
       try {
         localStorage.setItem("app_lang", lang);
         localStorage.setItem("evapo_app_lang", lang);
@@ -1858,8 +2370,14 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   };
 
   private isViloyatOnlySelection = (): boolean => {
-    const { viloyat, tuman, mavsum } = this.state.filters;
-    return !!(viloyat && !tuman && !mavsum && !this.hasExternalMinMaxFilters());
+    const { viloyat, tuman, mavsum, fermer_nom } = this.state.filters;
+    return !!(
+      viloyat &&
+      !tuman &&
+      !mavsum &&
+      !fermer_nom &&
+      !this.hasExternalMinMaxFilters()
+    );
   };
 
   private normalizeMavsumValue = (value: string): string => {
@@ -2329,11 +2847,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
             className="loc-portal-dropdown language-dropdown-menu"
             style={languageDropdownStyle}
           >
-            {LANGUAGES.map((lang) => (
+            {LANGUAGE_OPTIONS.map((lang) => (
               <button
                 key={lang.code}
                 className={`dropdown-item ${currentLang === lang.code ? "active" : ""}`}
-                onClick={() => this.selectLanguage(lang.code)}
+                onClick={() => this.selectLanguage(lang.code as LangCode)}
               >
                 <span className="dropdown-code">
                   {lang.code === "uz_lat"
@@ -2496,7 +3014,9 @@ export default class LanguageSelectorV20 extends React.PureComponent<
                   <span
                     className={`region-filter-trigger-value ${selectedValue ? "" : "placeholder"}`}
                   >
-                    {selectedValue ||
+                    {(selectedValue
+                      ? this.getLocalizedRegionOptionLabel(key, selectedValue)
+                      : "") ||
                       (key === "mavsum" || key === "yil"
                         ? key === "yil"
                           ? BUTTON_LABELS[currentLang].yearAllLabel
@@ -2554,7 +3074,10 @@ export default class LanguageSelectorV20 extends React.PureComponent<
                 })
                 .map((value) => ({
                   value,
-                  label: value,
+                  label: this.getLocalizedRegionOptionLabel(
+                    openRegionFilterMenuKey,
+                    value,
+                  ),
                 })),
             ].map((option) => (
               <button

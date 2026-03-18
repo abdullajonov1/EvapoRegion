@@ -426,4 +426,35 @@ export class LocalRegionFilterEngine {
 
     return c.length ? c.join(" AND ") : "1=1";
   }
+
+  /**
+   * Check if a filter combination has any data.
+   * Used for cascading validation: when a filter changes, validate if other filters still have data.
+   *
+   * @param testFilters - Filters to validate (includes the new/changed filter)
+   * @returns true if at least 1 record matches the filter combination, false otherwise
+   */
+  async checkFilterCombinationExists(
+    testFilters: LocalFilterState,
+  ): Promise<boolean> {
+    const ds = this.getActiveDs(testFilters);
+    if (!ds) return false;
+
+    const whereClause = this.buildWhereClause(testFilters);
+
+    try {
+      const res = await (ds as any).query({
+        where: whereClause,
+        returnGeometry: false,
+        pageSize: 1,
+        returnDistinctValues: false,
+      });
+
+      // Return true if at least 1 record exists
+      return (res?.records || []).length > 0;
+    } catch (error) {
+      console.warn("Error validating filter combination:", error);
+      return false; // Assume invalid if query fails
+    }
+  }
 }

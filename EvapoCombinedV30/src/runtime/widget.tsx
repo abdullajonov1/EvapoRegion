@@ -131,9 +131,13 @@ export default class WaterUnifiedWidget extends React.PureComponent<
   private _abortController: AbortController | null = null;
   private _fetchQueue: number = 0;
   private _lastFetchId: number = 0;
+  private _inFlightFetchSignature: string | null = null;
+  private _lastCompletedFetchSignature: string | null = null;
   private throttledFetchData: any;
   // Event handler reference
   filterChangeHandler: any = null;
+  clearSelectionHandler: any = null;
+  private _lastExternalClearTimestamp: number = 0;
   // Reference for pie chart container to measure size
   private _pieChartContainerRef: React.RefObject<HTMLDivElement> =
     React.createRef();
@@ -274,6 +278,21 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       this.filterChangeHandler,
     );
 
+    this.clearSelectionHandler = this.handleExternalDependentFiltersClear;
+    document.addEventListener("clearCropSelection", this.clearSelectionHandler);
+    document.addEventListener(
+      "clearCanalSelection",
+      this.clearSelectionHandler,
+    );
+    document.addEventListener(
+      "clearWaterSourceSelection",
+      this.clearSelectionHandler,
+    );
+    document.addEventListener(
+      "regionDependentFiltersReset",
+      this.clearSelectionHandler,
+    );
+
     document.addEventListener(
       "themeToggled",
       this.waterUnifiedHandleThemeChange as EventListener,
@@ -327,7 +346,7 @@ export default class WaterUnifiedWidget extends React.PureComponent<
     // Set up periodic updates (every 5 minutes)
     this.updateTimer = setInterval(() => {
       if (this._isMounted) {
-        this.waterUnifiedFetchData();
+        this.waterUnifiedFetchData(true);
       }
     }, 300000); // 5 minutes
 
@@ -446,6 +465,10 @@ export default class WaterUnifiedWidget extends React.PureComponent<
     if (event?.detail?.minMax !== undefined) {
       const { minMax, timestamp = 0, source } = event.detail;
 
+      if ((minMax ?? null) === (this.state.minMax ?? null)) {
+        return;
+      }
+
       // Skip if this is a duplicate event or from this widget
       if (
         timestamp <= this.state.lastMinMaxEventTimestamp ||
@@ -476,6 +499,16 @@ export default class WaterUnifiedWidget extends React.PureComponent<
     }
   }
   handleWaterSupplyReset = () => {
+    const alreadyReset =
+      !this.state.viloyat &&
+      !this.state.tuman &&
+      !this.state.mavsum &&
+      !this.state.fermer_nomNom &&
+      !this.state.cropFieldFilters.selectedEkinTuri &&
+      !this.state.cropFieldFilters.selectedManbaNomi &&
+      !this.state.cropFieldFilters.selectedKanalNomi;
+    if (alreadyReset) return;
+
     this.setState(
       {
         viloyat: "",
@@ -711,6 +744,22 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       this.filterChangeHandler,
     );
     document.removeEventListener(
+      "clearCropSelection",
+      this.clearSelectionHandler,
+    );
+    document.removeEventListener(
+      "clearCanalSelection",
+      this.clearSelectionHandler,
+    );
+    document.removeEventListener(
+      "clearWaterSourceSelection",
+      this.clearSelectionHandler,
+    );
+    document.removeEventListener(
+      "regionDependentFiltersReset",
+      this.clearSelectionHandler,
+    );
+    document.removeEventListener(
       "themeToggled",
       this.waterUnifiedHandleThemeChange as EventListener,
     );
@@ -738,9 +787,54 @@ export default class WaterUnifiedWidget extends React.PureComponent<
     }
   }
 
+  private handleExternalDependentFiltersClear = (event: any): void => {
+    const timestamp = Number(event?.detail?.timestamp || 0);
+    if (timestamp && timestamp <= this._lastExternalClearTimestamp) {
+      return;
+    }
+    if (timestamp) {
+      this._lastExternalClearTimestamp = timestamp;
+    }
+
+    const reason = String(event?.detail?.reason || "");
+    const shouldClearMinMax =
+      reason === "tumanChanged" || reason === "fermerChanged";
+
+    this.setState(
+      (prev) => {
+        const hasDependentSelection =
+          !!prev.cropFieldFilters.selectedEkinTuri ||
+          !!prev.cropFieldFilters.selectedManbaNomi ||
+          !!prev.cropFieldFilters.selectedKanalNomi;
+        const hasMinMaxToClear = shouldClearMinMax && !!prev.minMax;
+
+        if (!hasDependentSelection && !hasMinMaxToClear) return null;
+
+        return {
+          minMax: shouldClearMinMax ? null : prev.minMax,
+          cropFieldFilters: {
+            ...prev.cropFieldFilters,
+            selectedEkinTuri: "",
+            selectedManbaNomi: "",
+            selectedKanalNomi: "",
+          },
+        };
+      },
+      () => {
+        this.throttledFetchData();
+        this.waterUnifiedUpdateUrlWithFilters();
+      },
+    );
+  };
+
   waterUnifiedHandleWaterSourceSelected(event) {
     if (event?.detail?.sourceSelected !== undefined) {
       const source = event.detail.sourceSelected;
+      if (
+        (source || "") === (this.state.cropFieldFilters.selectedManbaNomi || "")
+      ) {
+        return;
+      }
       this.setState(
         (s) => ({
           cropFieldFilters: {
@@ -795,6 +889,22 @@ export default class WaterUnifiedWidget extends React.PureComponent<
   waterUnifiedHandleCropSelected(event) {
     if (event?.detail?.cropType !== undefined) {
       const crop = event.detail.cropType;
+
+      // Skip clearing a crop selection from external event (e.g., EvapoCrop broadcasting crop=null)
+      // Only update if: 1) crop is explicitly set to a new value, or 2) crop stays null and is already null
+      const prevCrop = this.state.cropFieldFilters.selectedEkinTuri || null;
+      if (crop === null && prevCrop === null) {
+        return; // Already null, no-op
+      }
+      if (crop === null && prevCrop !== null) {
+        return; // Ignore external crop clear events
+      }
+      if (
+        (crop || "") === (this.state.cropFieldFilters.selectedEkinTuri || "")
+      ) {
+        return;
+      }
+
       this.setState(
         (s) => ({
           cropFieldFilters: {
@@ -882,8 +992,48 @@ export default class WaterUnifiedWidget extends React.PureComponent<
     this.setState({ showTotalDetails: !this.state.showTotalDetails });
   };
 
+  private buildFetchSignature = (): string => {
+    const {
+      viloyat,
+      tuman,
+      mavsum,
+      fermer_nomNom,
+      cropFieldFilters,
+      minMax,
+      yil,
+    } = this.state;
+    const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
+    const normalizedYear = yil && /^\d{4}$/.test(yil) ? yil : "";
+    const { selectedEkinTuri, selectedManbaNomi, selectedKanalNomi } =
+      cropFieldFilters;
+
+    return [
+      viloyat || "",
+      tuman || "",
+      normalizedMavsum || "",
+      fermer_nomNom || "",
+      selectedEkinTuri || "",
+      selectedManbaNomi || "",
+      selectedKanalNomi || "",
+      minMax || "",
+      normalizedYear,
+    ].join("|");
+  };
+
   // Main data fetching method with better coordination
-  waterUnifiedFetchData = async () => {
+  waterUnifiedFetchData = async (force: boolean = false) => {
+    const fetchSignature = this.buildFetchSignature();
+    if (
+      !force &&
+      (fetchSignature === this._inFlightFetchSignature ||
+        fetchSignature === this._lastCompletedFetchSignature)
+    ) {
+      console.log("[WaterUnifiedWidget] Skipping duplicate fetch request");
+      return;
+    }
+
+    this._inFlightFetchSignature = fetchSignature;
+
     // Generate a unique ID for this fetch operation
     const fetchId = ++this._lastFetchId;
     this._fetchQueue++;
@@ -928,6 +1078,8 @@ export default class WaterUnifiedWidget extends React.PureComponent<
           `[WaterUnifiedWidget] Fetch #${fetchId} completed successfully`,
         );
 
+        this._lastCompletedFetchSignature = fetchSignature;
+
         // Merge the data from both sources
         this.waterUnifiedMergeData({
           totalConsumption: consumptionData.totalConsumption,
@@ -961,6 +1113,10 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       }
     } finally {
       this._fetchQueue--;
+
+      if (this._inFlightFetchSignature === fetchSignature) {
+        this._inFlightFetchSignature = null;
+      }
 
       // Only clear the controller if this was the last fetch in the queue
       if (this._fetchQueue === 0) {
@@ -1275,16 +1431,44 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       const incomingMavsum = hasRawMavsum
         ? String(filters.mavsumRaw ?? "")
         : String(filters.mavsum ?? "");
+      const nextViloyat = filters.viloyat || "";
+      const nextTuman = filters.tuman || "";
+      const nextFermer = filters.fermer_nomNom || "";
+      const nextYil =
+        this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR;
+
+      const tumanChanged = nextTuman !== (this.state.tuman || "");
+      const fermerChanged = nextFermer !== (this.state.fermer_nomNom || "");
+      const shouldResetDependentFilters = tumanChanged || fermerChanged;
+
+      const hasNoChanges =
+        nextViloyat === (this.state.viloyat || "") &&
+        nextTuman === (this.state.tuman || "") &&
+        incomingMavsum === (this.state.mavsum || "") &&
+        nextFermer === (this.state.fermer_nomNom || "") &&
+        nextYil === (this.state.yil || DEFAULT_INITIAL_YEAR);
+      if (hasNoChanges) return;
 
       this.setState(
-        {
-          viloyat: filters.viloyat || "",
-          tuman: filters.tuman || "",
+        (prev) => ({
+          viloyat: nextViloyat,
+          tuman: nextTuman,
           mavsum: incomingMavsum,
-          fermer_nomNom: filters.fermer_nomNom || "",
+          fermer_nomNom: nextFermer,
           // ✅ YEAR passthrough
-          yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
-        },
+          yil: nextYil,
+          // IMPORTANT: when district/farmer changes, clear dependent filters
+          // so stale ekin/manba/kanal/min_max are not carried into new fetches.
+          minMax: shouldResetDependentFilters ? null : prev.minMax,
+          cropFieldFilters: shouldResetDependentFilters
+            ? {
+                ...prev.cropFieldFilters,
+                selectedEkinTuri: "",
+                selectedManbaNomi: "",
+                selectedKanalNomi: "",
+              }
+            : prev.cropFieldFilters,
+        }),
         () => {
           this.throttledFetchData();
           this.waterUnifiedUpdateUrlWithFilters();
@@ -1299,19 +1483,46 @@ export default class WaterUnifiedWidget extends React.PureComponent<
     const incomingMavsum = hasRawMavsum
       ? String(filters.mavsumRaw ?? "")
       : String(filters.mavsum ?? "");
+    const nextTuman = filters.tuman || "";
+    const nextFermer = filters.fermer_nomNom || "";
+    const tumanChanged = nextTuman !== (this.state.tuman || "");
+    const fermerChanged = nextFermer !== (this.state.fermer_nomNom || "");
+    const shouldResetDependentFilters = tumanChanged || fermerChanged;
     const newState = {
       viloyat: filters.viloyat || "",
-      tuman: filters.tuman || "",
+      tuman: nextTuman,
       mavsum: incomingMavsum,
-      fermer_nomNom: filters.fermer_nomNom || "",
+      fermer_nomNom: nextFermer,
       // ✅ YEAR
       yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
     };
 
-    this.setState(newState, () => {
-      this.throttledFetchData();
-      this.waterUnifiedUpdateUrlWithFilters();
-    });
+    const hasNoChanges =
+      newState.viloyat === (this.state.viloyat || "") &&
+      newState.tuman === (this.state.tuman || "") &&
+      newState.mavsum === (this.state.mavsum || "") &&
+      newState.fermer_nomNom === (this.state.fermer_nomNom || "") &&
+      newState.yil === (this.state.yil || DEFAULT_INITIAL_YEAR);
+    if (hasNoChanges) return;
+
+    this.setState(
+      (prev) => ({
+        ...newState,
+        minMax: shouldResetDependentFilters ? null : prev.minMax,
+        cropFieldFilters: shouldResetDependentFilters
+          ? {
+              ...prev.cropFieldFilters,
+              selectedEkinTuri: "",
+              selectedManbaNomi: "",
+              selectedKanalNomi: "",
+            }
+          : prev.cropFieldFilters,
+      }),
+      () => {
+        this.throttledFetchData();
+        this.waterUnifiedUpdateUrlWithFilters();
+      },
+    );
   }
   waterUnifiedUpdateUrlWithFilters = () => {
     const url = new URL(window.location.href);
@@ -2114,7 +2325,7 @@ export default class WaterUnifiedWidget extends React.PureComponent<
         {error ? (
           <div className="water-unified-error">
             <p>{error}</p>
-            <button onClick={this.waterUnifiedFetchData}>
+            <button onClick={() => this.waterUnifiedFetchData(true)}>
               {t(lang, "button.retry")}
             </button>
           </div>

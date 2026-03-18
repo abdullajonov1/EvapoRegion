@@ -859,6 +859,10 @@ export default class CropDistributionWidget extends React.PureComponent<
     this.registerWithMaster();
 
     document.addEventListener("clearCropSelection", this.handleClearSelection);
+    document.addEventListener(
+      "regionDependentFiltersReset",
+      this.handleExternalDependentReset,
+    );
 
     // Listen for language changes
     document.addEventListener(
@@ -1014,6 +1018,55 @@ export default class CropDistributionWidget extends React.PureComponent<
     return "";
   }
 
+  // Validate if a crop exists for the given canal
+  private async validateCropForCanal(
+    selectedCrop: string | null,
+    canalName: string,
+  ): Promise<string | null> {
+    if (!selectedCrop || !canalName) return selectedCrop;
+
+    try {
+      const { viloyat, tuman, mavsum, fermer_nom, waterSource, minMax, yil } =
+        this.state;
+
+      const queryParams = new URLSearchParams();
+      if (viloyat) queryParams.append("viloyat", viloyat);
+      if (tuman) queryParams.append("tuman", tuman);
+      if (mavsum) queryParams.append("mavsum", mavsum);
+      if (fermer_nom) queryParams.append("fermer_nom", fermer_nom);
+      if (waterSource) queryParams.append("manba_nomi", waterSource);
+      if (canalName) queryParams.append("kanal_nomi", canalName);
+      if (minMax) queryParams.append("min_max", minMax);
+      if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
+
+      const apiUrl = `https://sgm.uzspace.uz/api/v1/crop/distribution?${queryParams.toString()}`;
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) return null; // If API fails, don't clear crop
+
+      const data = await response.json();
+      const crops = (data.crop_distribution || []).filter(
+        (c) =>
+          c.area_ha > 0 &&
+          c.ekin_turi &&
+          this.ALLOWED_CROPS.includes(c.ekin_turi),
+      );
+
+      // Check if selectedCrop exists in available crops for this canal
+      const cropExists = crops.some((c) => c.ekin_turi === selectedCrop);
+      return cropExists ? selectedCrop : null;
+    } catch (error) {
+      console.warn("[EvapoCropV32] Error validating crop for canal:", error);
+      return selectedCrop; // On error, keep crop (don't clear)
+    }
+  }
+
   // Handle canal selection
   handlecanalselection = async (event): Promise<void> => {
     if (event && event.detail) {
@@ -1050,18 +1103,27 @@ export default class CropDistributionWidget extends React.PureComponent<
         return;
       }
 
+      // ✅ NEW: Validate that selected crop still exists for new canal
+      const validatedCrop =
+        currentCrop && nextCanalName
+          ? await this.validateCropForCanal(currentCrop, nextCanalName)
+          : currentCrop;
+
       this.setState(
         {
           canalName: nextCanalName,
           lastCanalEventTimestamp: timestamp,
           isHandlingExternalEvent: true,
-          selectedCrop: currentCrop,
+          selectedCrop: validatedCrop,
           error: null,
         },
         () => {
           this.scheduleExternalFetch();
 
           if (this.state.selectedCrop !== currentCrop) {
+            console.log(
+              `[EvapoCropV32] Crop cleared due to canal change: ${currentCrop} → ${validatedCrop}`,
+            );
             this.notifyCropSelection();
           }
           this.notifyFilterStateChange();
@@ -1162,25 +1224,29 @@ export default class CropDistributionWidget extends React.PureComponent<
 
     const incomingFermer = filters.fermer_nomNom ?? filters.fermer_nom ?? "";
 
+    // When tuman OR fermer_nom changes, always clear the selected crop (prevents
+    // stale crop surviving a region/farmer switch regardless of setState batching).
+    const tumanChanged = (filters.tuman || "") !== this.state.tuman;
+    const fermerChanged = incomingFermer !== this.state.fermer_nom;
+    const nextCrop = tumanChanged || fermerChanged ? null : currentCrop;
+
     if (this.state.connectionStatus !== "connected") {
       this.setState({
         viloyat: filters.viloyat || "",
         tuman: filters.tuman || "",
         mavsum: filters.mavsum || "",
         fermer_nom: incomingFermer,
-        // ✅ year
         yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
-        selectedCrop: currentCrop,
-        activeSlice: null,
+        selectedCrop: nextCrop,
+        activeSlice:
+          tumanChanged || fermerChanged ? null : this.state.activeSlice,
       });
       return;
     }
 
-    // Check if only fermer_nom changed
-    const fermerChanged = incomingFermer !== this.state.fermer_nom;
     const otherFiltersChanged =
+      tumanChanged ||
       filters.viloyat !== this.state.viloyat ||
-      filters.tuman !== this.state.tuman ||
       filters.mavsum !== this.state.mavsum ||
       (this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR) !==
         this.state.yil;
@@ -1195,10 +1261,10 @@ export default class CropDistributionWidget extends React.PureComponent<
         tuman: filters.tuman || "",
         mavsum: filters.mavsum || "",
         fermer_nom: incomingFermer,
-        // ✅ year
         yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
-        selectedCrop: currentCrop,
-        activeSlice: null,
+        selectedCrop: nextCrop,
+        activeSlice:
+          tumanChanged || fermerChanged ? null : this.state.activeSlice,
         isHandlingExternalEvent: true,
         error: null,
       },
@@ -1302,6 +1368,10 @@ export default class CropDistributionWidget extends React.PureComponent<
     document.removeEventListener(
       "clearCropSelection",
       this.handleClearSelection,
+    );
+    document.removeEventListener(
+      "regionDependentFiltersReset",
+      this.handleExternalDependentReset,
     );
     document.removeEventListener(
       "appLanguageChanged",
@@ -1725,14 +1795,13 @@ export default class CropDistributionWidget extends React.PureComponent<
 
         let newActiveSlice: number | null = null;
         let newSelectedCrop: string | null = null;
+        const previousCrop = this.state.selectedCrop;
 
-        if (this.state.selectedCrop) {
-          const idx = crops.findIndex(
-            (c) => c.ekin_turi === this.state.selectedCrop,
-          );
+        if (previousCrop) {
+          const idx = crops.findIndex((c) => c.ekin_turi === previousCrop);
           if (idx !== -1) {
             newActiveSlice = idx;
-            newSelectedCrop = this.state.selectedCrop;
+            newSelectedCrop = previousCrop;
           }
         }
 
@@ -1746,8 +1815,10 @@ export default class CropDistributionWidget extends React.PureComponent<
           },
           () => {
             this.applyCropFilter();
-            if (this.state.selectedCrop !== newSelectedCrop)
+            // If selected crop was invalidated (not found in new data), notify others
+            if (previousCrop && !newSelectedCrop) {
               this.notifyCropSelection();
+            }
           },
         );
       } catch (fetchError: any) {
@@ -1873,6 +1944,194 @@ export default class CropDistributionWidget extends React.PureComponent<
     return cropIcons[cropName] || "🌱";
   };
 
+  // Keep card wave color aligned with map renderer crop colors.
+  getCropColor = (cropName: string): string => {
+    const cropColors: Record<string, string> = {
+      "Bug'doy": "#f59e0b", // amber-gold  (xarita: #ffaa00, boyitilgan)
+      Paxta: "#a5f3fc", // yengil ko'k (xarita: #ffffff, UI uchun ko'rinadigan)
+      "Makkajo'xori": "#fde047", // quyosh sariq (xarita: #f5ef49, yorqin)
+      "Bog'": "#4ade80", // yorqin yashil (xarita: #147a12, sochli)
+      Bogi: "#4ade80",
+      "Bog'lar": "#4ade80",
+      Mosh: "#86efac", // nozik yashil (xarita: #7ac48c)
+      Sholi: "#38bdf8", // osmon ko'k (xarita: #008bfc, yoqimli)
+      Beda: "#4ade80", // zangori-yashil (xarita: #05ff4c, neon emas)
+      "Aralash ekin": "#d4b96a", // iliq oltin (xarita: #f0eeaf, kontrast)
+      "Bo'z yer": "#94a3b8", // sovuq kulrang (xarita: #868f8d)
+      "Ikkilamchi ekin ekilmagan": "#bbf7d0", // yengil nozik yashil
+      "Ikkiamchi ekin ekilmagan": "#bbf7d0",
+      "Baliq hovuz": "#22d3ee", // tiniq moviy (xarita: #adfbff, sochli)
+      "Bolig hovuz": "#22d3ee",
+      "Qovun-tarvuz": "#e879f9", // pushti-binafsha (xarita: #e695dd, yorqin)
+      Vegetatsiyasiz: "#fb7185", // yoqimli marjon qizil (xarita: #fd7f6f)
+      Sabzi: "#fb923c", // sabzi to'q sariq-qizg'ish (xarita: #8a6629)
+    };
+    return cropColors[cropName] || "#38bdf8";
+  };
+
+  getReadableTextColor = (hexColor: string): string => {
+    const normalizedHex = String(hexColor || "").replace("#", "");
+    if (!/^[0-9a-fA-F]{6}$/.test(normalizedHex)) return "#ffffff";
+
+    const r = parseInt(normalizedHex.slice(0, 2), 16);
+    const g = parseInt(normalizedHex.slice(2, 4), 16);
+    const b = parseInt(normalizedHex.slice(4, 6), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 165 ? "#0b1e2e" : "#ffffff";
+  };
+
+  private buildVerticalWavePath = (
+    height: number,
+    baseX: number,
+    phase: number,
+    amp: number,
+    segmentCount: number,
+    driftX = 0,
+  ): string => {
+    const safeHeight = Math.max(8, height);
+    const waveFreq = (Math.PI * 2) / Math.max(6, segmentCount - 1);
+    let d = `M ${baseX + driftX} 0`;
+    for (let i = 1; i < segmentCount; i++) {
+      const py = (safeHeight * i) / (segmentCount - 1);
+      const wobble = Math.sin(i * waveFreq + phase) * amp;
+      const px = baseX + driftX + wobble;
+      d += ` L ${px} ${py}`;
+    }
+    return d;
+  };
+
+  private renderCropWaveLayer = (
+    cropColor: string,
+    selected: boolean,
+  ): JSX.Element => {
+    const width = selected ? 120 : 22;
+    const height = 100;
+    const baseX = selected
+      ? width + 3.5
+      : Math.max(11, Math.round(width * 0.62));
+    const segmentCount = selected ? 30 : 18;
+    const ampMain = selected ? 4.4 : 2.2;
+    const ampFine = selected ? 2.5 : 1.3;
+
+    const waveEdgeA = this.buildVerticalWavePath(
+      height,
+      baseX,
+      0,
+      ampMain,
+      segmentCount,
+    );
+    const waveEdgeB = this.buildVerticalWavePath(
+      height,
+      baseX,
+      Math.PI / 2,
+      ampMain,
+      segmentCount,
+    );
+    const waveEdgeC = this.buildVerticalWavePath(
+      height,
+      baseX,
+      Math.PI,
+      ampMain,
+      segmentCount,
+    );
+    const waveEdgeD = this.buildVerticalWavePath(
+      height,
+      baseX,
+      (Math.PI * 3) / 2,
+      ampMain,
+      segmentCount,
+    );
+
+    const foamEdgeA = this.buildVerticalWavePath(
+      height,
+      baseX,
+      Math.PI / 4,
+      ampFine,
+      segmentCount,
+      1,
+    );
+    const foamEdgeB = this.buildVerticalWavePath(
+      height,
+      baseX,
+      (Math.PI * 3) / 4,
+      ampFine,
+      segmentCount,
+      1,
+    );
+    const foamEdgeC = this.buildVerticalWavePath(
+      height,
+      baseX,
+      (Math.PI * 5) / 4,
+      ampFine,
+      segmentCount,
+      1,
+    );
+    const foamEdgeD = this.buildVerticalWavePath(
+      height,
+      baseX,
+      (Math.PI * 7) / 4,
+      ampFine,
+      segmentCount,
+      1,
+    );
+
+    const toFillPath = (edgePath: string): string => `${edgePath} H 0 V 0 Z`;
+
+    const fillPathA = toFillPath(waveEdgeA);
+    const fillPathB = toFillPath(waveEdgeB);
+    const fillPathC = toFillPath(waveEdgeC);
+    const fillPathD = toFillPath(waveEdgeD);
+
+    return (
+      <div className={`crop-wave-layer${selected ? " selected" : ""}`}>
+        <svg
+          className="crop-wave-svg"
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          role="presentation"
+          aria-hidden="true"
+        >
+          <path d={fillPathA} fill={cropColor} opacity={0.74}>
+            <animate
+              attributeName="d"
+              values={`${fillPathA};${fillPathB};${fillPathC};${fillPathD};${fillPathA}`}
+              dur={selected ? "2.4s" : "2.9s"}
+              repeatCount="indefinite"
+            />
+          </path>
+          <path
+            d={waveEdgeA}
+            fill="none"
+            stroke="rgba(239, 250, 255, 0.88)"
+            strokeWidth={selected ? 1.3 : 1.05}
+            strokeLinecap="round"
+          >
+            <animate
+              attributeName="d"
+              values={`${waveEdgeA};${waveEdgeB};${waveEdgeC};${waveEdgeD};${waveEdgeA}`}
+              dur={selected ? "2.4s" : "2.9s"}
+              repeatCount="indefinite"
+            />
+          </path>
+          <path
+            d={foamEdgeA}
+            fill="none"
+            stroke="rgba(198, 239, 255, 0.62)"
+            strokeWidth={selected ? 1.0 : 0.85}
+            strokeLinecap="round"
+          >
+            <animate
+              attributeName="d"
+              values={`${foamEdgeA};${foamEdgeB};${foamEdgeC};${foamEdgeD};${foamEdgeA}`}
+              dur={selected ? "3.2s" : "3.8s"}
+              repeatCount="indefinite"
+            />
+          </path>
+        </svg>
+      </div>
+    );
+  };
+
   // Render card view with dynamic responsive sizing
   renderCardView = () => {
     const { cropData, containerWidth, containerHeight, lang } = this.state;
@@ -1919,6 +2178,19 @@ export default class CropDistributionWidget extends React.PureComponent<
         }}
       >
         {sortedCrops.map((crop, index) => {
+          const cropColor = this.getCropColor(crop.ekin_turi);
+          const selectedTextColor = this.getReadableTextColor(cropColor);
+          const cropCardStyle: React.CSSProperties = {
+            flex: isVertical ? "0 0 auto" : "1 1 0",
+            minWidth: 0,
+            height: isVertical ? "auto" : "100%",
+            padding: `${cardPadding}px`,
+            gap: `${elementGap}px`,
+            boxSizing: "border-box",
+          };
+          (cropCardStyle as any)["--crop-wave-color"] = cropColor;
+          (cropCardStyle as any)["--crop-selected-text"] = selectedTextColor;
+
           const waterUsageLabel =
             lang === "ru"
               ? "Расход воды"
@@ -1941,15 +2213,12 @@ export default class CropDistributionWidget extends React.PureComponent<
                   this.handleCropSelection(crop.ekin_turi);
                 }
               }}
-              style={{
-                flex: isVertical ? "0 0 auto" : "1 1 0",
-                minWidth: 0,
-                height: isVertical ? "auto" : "100%",
-                padding: `${cardPadding}px`,
-                gap: `${elementGap}px`,
-                boxSizing: "border-box",
-              }}
+              style={cropCardStyle}
             >
+              {this.renderCropWaveLayer(
+                cropColor,
+                this.state.selectedCrop === crop.ekin_turi,
+              )}
               <div
                 className="crop-header"
                 style={{ gap: `${Math.max(2, elementGap * 0.75)}px` }}
@@ -1996,6 +2265,28 @@ export default class CropDistributionWidget extends React.PureComponent<
         activeSlice: null,
       });
     }
+  };
+
+  handleExternalDependentReset = (event) => {
+    if (event?.detail?.source !== "EvapoWidget") return;
+    const reason = String(event?.detail?.reason || "");
+    if (reason !== "tumanChanged" && reason !== "fermerChanged") return;
+
+    this.setState(
+      {
+        selectedCrop: null,
+        activeSlice: null,
+        waterSource: "",
+        canalName: "",
+        minMax: null,
+        lastMinMaxEventTimestamp: 0,
+      },
+      () => {
+        if (this.state.connectionStatus === "connected") {
+          this.fetchCropData();
+        }
+      },
+    );
   };
 
   // Handle crop selection

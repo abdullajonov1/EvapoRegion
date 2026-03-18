@@ -553,6 +553,11 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       this.onClearWaterSource,
     );
     document.addEventListener("clearCanalSelection", this.onClearCanal);
+    document.addEventListener("clearCropSelection", this.onClearCrop);
+    document.addEventListener(
+      "regionDependentFiltersReset",
+      this.onRegionDependentFiltersReset,
+    );
     window.addEventListener("popstate", this.onPopState);
   }
 
@@ -586,6 +591,11 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       this.onClearWaterSource,
     );
     document.removeEventListener("clearCanalSelection", this.onClearCanal);
+    document.removeEventListener("clearCropSelection", this.onClearCrop);
+    document.removeEventListener(
+      "regionDependentFiltersReset",
+      this.onRegionDependentFiltersReset,
+    );
     window.removeEventListener("popstate", this.onPopState);
   }
 
@@ -1051,6 +1061,41 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     if (d.yil !== undefined)
       newState.yil = this.normalizeYearValue(d.yil) || DEFAULT_INITIAL_YEAR;
 
+    // When tuman changes, clear canal and water-source selections so the new
+    // district's data is shown without stale filters (fixes async setState race).
+    const tumanChanged =
+      d.tuman !== undefined && (d.tuman || "") !== this.state.tuman;
+    if (tumanChanged) {
+      newState.selectedSource = null;
+      (newState as any).selectedSourceSnapshot = null;
+      newState.selectedWaterSource = "";
+      newState.selectedCanal = null;
+      (newState as any).selectedCanalSnapshot = null;
+      newState.lastCanalEventTimestamp = 0;
+      // Tuman changed: dependent filters must return to default state.
+      newState.ekinTuri = "";
+      newState.minMax = null;
+      newState.lastMinMaxEventTimestamp = 0;
+    }
+
+    // When fermer_nom changes (and tuman did not change), also clear selections.
+    const fermerNomChanged =
+      !tumanChanged &&
+      d.fermer_nom !== undefined &&
+      (d.fermer_nom || "") !== (this.state.fermerNom || "");
+    if (fermerNomChanged) {
+      newState.selectedSource = null;
+      (newState as any).selectedSourceSnapshot = null;
+      newState.selectedWaterSource = "";
+      newState.selectedCanal = null;
+      (newState as any).selectedCanalSnapshot = null;
+      newState.lastCanalEventTimestamp = 0;
+      // Fermer changed: dependent filters must return to default state.
+      newState.ekinTuri = "";
+      newState.minMax = null;
+      newState.lastMinMaxEventTimestamp = 0;
+    }
+
     // Store filter state even if not connected yet;
     // only fetch when connected (matches original widget pattern).
     if (this.state.connectionStatus !== "connected") {
@@ -1315,7 +1360,11 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
 
   private onClearWaterSource = (e: any): void => {
     if (e?.detail?.source === "EvapoWidget") {
-      this.setState({ selectedSource: null, selectedSourceSnapshot: null });
+      this.setState({
+        selectedSource: null,
+        selectedSourceSnapshot: null,
+        selectedWaterSource: "",
+      });
     }
   };
 
@@ -1323,6 +1372,47 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     if (e?.detail?.source === "EvapoWidget") {
       this.setState({ selectedCanal: null, selectedCanalSnapshot: null });
     }
+  };
+
+  private onClearCrop = (e: any): void => {
+    if (e?.detail?.source === "EvapoWidget") {
+      this.setState({ ekinTuri: "" }, () => {
+        const viewType = this.props.config?.viewType || "waterSource";
+        if (viewType === "waterSource") {
+          this.fetchSourcesData();
+        } else {
+          this.fetchCanalData();
+        }
+      });
+    }
+  };
+
+  private onRegionDependentFiltersReset = (e: any): void => {
+    if (e?.detail?.source !== "EvapoWidget") return;
+    const reason = String(e?.detail?.reason || "");
+    if (reason !== "tumanChanged" && reason !== "fermerChanged") return;
+
+    const viewType = this.props.config?.viewType || "waterSource";
+    this.setState(
+      {
+        selectedSource: null,
+        selectedSourceSnapshot: null,
+        selectedWaterSource: "",
+        selectedCanal: null,
+        selectedCanalSnapshot: null,
+        lastCanalEventTimestamp: 0,
+        ekinTuri: "",
+        minMax: null,
+        lastMinMaxEventTimestamp: 0,
+      } as any,
+      () => {
+        if (viewType === "waterSource") {
+          this.fetchSourcesData();
+        } else {
+          this.fetchCanalData();
+        }
+      },
+    );
   };
 
   private onPopState = (): void => {
@@ -1549,27 +1639,43 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         newSelected = resolvedSelectedSource;
         newSelectedSnapshot =
           sources.find((s) => s.manba_nomi === resolvedSelectedSource) ?? null;
-      } else if (resolvedSelectedSource) {
-        newSelected = resolvedSelectedSource;
-        if (!newSelectedSnapshot) {
-          newSelectedSnapshot = {
-            manba_nomi: resolvedSelectedSource,
-            total_supply_m3: 0,
-            percentage: 0,
-          };
-        }
       } else {
+        // IMPORTANT: if current selection does not exist in new filtered data,
+        // reset to default (do not keep stale selection snapshot).
+        newSelected = null;
         newSelectedSnapshot = null;
       }
 
       if (this._isMounted) {
-        this.setState({
-          sourceData: { sources, totalSupply },
-          sourceLoading: false,
-          sourceError: null,
-          selectedSource: newSelected,
-          selectedSourceSnapshot: newSelectedSnapshot,
-        });
+        const prevSelected = this.state.selectedSource;
+        this.setState(
+          {
+            sourceData: { sources, totalSupply },
+            sourceLoading: false,
+            sourceError: null,
+            selectedSource: newSelected,
+            selectedSourceSnapshot: newSelectedSnapshot,
+          },
+          () => {
+            // If selection was cleared because item no longer exists in data,
+            // notify other widgets so they don't keep stale source filter.
+            if (prevSelected && !newSelected) {
+              document.dispatchEvent(
+                new CustomEvent("waterSourceSelected", {
+                  detail: {
+                    sourceSelected: "",
+                    timestamp: Date.now(),
+                    source: "WaterSourcesWidget",
+                    originSource: "EvapoWaterCanalV20",
+                    widgetId: this.props.id,
+                    autoCleared: true,
+                  },
+                  bubbles: true,
+                }),
+              );
+            }
+          },
+        );
       }
     } catch (err: any) {
       if (err?.name === "AbortError") {
@@ -1662,27 +1768,44 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         newSelected = resolvedSelectedCanal;
         newSelectedSnapshot =
           canals.find((c) => c.kanal_nomi === resolvedSelectedCanal) ?? null;
-      } else if (resolvedSelectedCanal) {
-        newSelected = resolvedSelectedCanal;
-        if (!newSelectedSnapshot) {
-          newSelectedSnapshot = {
-            kanal_nomi: resolvedSelectedCanal,
-            total_supply_m3: 0,
-            percentage: 0,
-          };
-        }
       } else {
+        // IMPORTANT: if current selection does not exist in new filtered data,
+        // reset to default (do not keep stale selection snapshot).
+        newSelected = null;
         newSelectedSnapshot = null;
       }
 
       if (this._isMounted) {
-        this.setState({
-          canalData: { canals, totalVolume },
-          canalLoading: false,
-          canalError: null,
-          selectedCanal: newSelected,
-          selectedCanalSnapshot: newSelectedSnapshot,
-        });
+        const prevSelected = this.state.selectedCanal;
+        this.setState(
+          {
+            canalData: { canals, totalVolume },
+            canalLoading: false,
+            canalError: null,
+            selectedCanal: newSelected,
+            selectedCanalSnapshot: newSelectedSnapshot,
+          },
+          () => {
+            // If selection was cleared because item no longer exists in data,
+            // notify other widgets so they don't keep stale canal filter.
+            if (prevSelected && !newSelected) {
+              document.dispatchEvent(
+                new CustomEvent("canalselected", {
+                  detail: {
+                    canalName: null,
+                    kanal_nomi: "",
+                    timestamp: Date.now(),
+                    source: "CanalDataWidget",
+                    originSource: "EvapoWaterCanalV20",
+                    widgetId: this.props.id,
+                    autoCleared: true,
+                  },
+                  bubbles: true,
+                }),
+              );
+            }
+          },
+        );
       }
     } catch (err: any) {
       if (err?.name === "AbortError") {
