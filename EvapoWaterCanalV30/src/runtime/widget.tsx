@@ -90,6 +90,7 @@ const LIGHT_SELECTED_LABEL_TEXT = "#3d5755";
 const DARK_SELECTED_LABEL_TEXT = "#129dde";
 const NOVKANT_NAME = "novkant";
 const DEFAULT_INITIAL_YEAR = "2025";
+const DEFAULT_INITIAL_REGION = "Farg'ona viloyati";
 
 const MAX_CONNECTION_ATTEMPTS = 3;
 
@@ -106,6 +107,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
   > = {};
   private fetchAbortController: AbortController | null = null;
   private externalRefreshTimer: number | null = null;
+  private pendingMinMaxClearTimer: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private containerRef = React.createRef<HTMLDivElement>();
   private _prevDefinitionExpression = "";
@@ -154,7 +156,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     this.state = {
       lang: getInitialLang(),
       isDarkTheme: initialIsDarkTheme,
-      viloyat: "",
+      viloyat: DEFAULT_INITIAL_REGION,
       tuman: "",
       mavsum: "",
       ekinTuri: "",
@@ -266,6 +268,10 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     this._isMounted = false;
     this.removeEventListeners();
     this.clearExternalRefreshTimer();
+    if (this.pendingMinMaxClearTimer !== null) {
+      window.clearTimeout(this.pendingMinMaxClearTimer);
+      this.pendingMinMaxClearTimer = null;
+    }
     this.fetchAbortController?.abort();
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -693,29 +699,33 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     lang: "uz" | "kir" | "ru",
   ): Promise<string[]> {
     const typeCandidates = ["Evapo", "Evapo-RegionV20", "EvapoWaterCanalV20"];
-    for (const typeName of typeCandidates) {
-      try {
-        const url = `https://apiwater.sgm.uzspace.uz/api/v1/directories/${encodeURIComponent(typeName)}?lang=${encodeURIComponent(lang)}&key=${encodeURIComponent(key)}`;
-        const response = await fetch(url, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) continue;
-        const json = await response.json();
-        const rows = Array.isArray(json)
-          ? json
-          : Array.isArray(json?.items)
-            ? json.items
-            : [];
-        const values = rows
-          .filter((row) => row && typeof row === "object")
-          .map((row) =>
-            String(row?.value ?? row?.label ?? row?.name ?? "").trim(),
-          )
-          .filter(Boolean);
-        if (values.length) return values;
-      } catch {
-        // try next type candidate
+    // Try sgm.uzspace.uz first (CORS-allowed from localhost), then apiwater as fallback
+    const domains = ["sgm.uzspace.uz", "apiwater.sgm.uzspace.uz"];
+    for (const domain of domains) {
+      for (const typeName of typeCandidates) {
+        try {
+          const url = `https://${domain}/api/v1/directories/${encodeURIComponent(typeName)}?lang=${encodeURIComponent(lang)}&key=${encodeURIComponent(key)}`;
+          const response = await fetch(url, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) continue;
+          const json = await response.json();
+          const rows = Array.isArray(json)
+            ? json
+            : Array.isArray(json?.items)
+              ? json.items
+              : [];
+          const values = rows
+            .filter((row) => row && typeof row === "object")
+            .map((row) =>
+              String(row?.value ?? row?.label ?? row?.name ?? "").trim(),
+            )
+            .filter(Boolean);
+          if (values.length) return values;
+        } catch {
+          // try next candidate
+        }
       }
     }
     return [];
@@ -1262,9 +1272,31 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     const prevMinMax = this.state.minMax || null;
     if (minMax === prevMinMax) return;
 
-    this.setState({ minMax, lastMinMaxEventTimestamp: timestamp }, () => {
-      this.scheduleExternalDataFetch();
-    });
+    if (this.pendingMinMaxClearTimer !== null) {
+      window.clearTimeout(this.pendingMinMaxClearTimer);
+      this.pendingMinMaxClearTimer = null;
+    }
+
+    const applyMinMax = (value: string | null): void => {
+      this.setState(
+        { minMax: value, lastMinMaxEventTimestamp: timestamp },
+        () => {
+          this.scheduleExternalDataFetch();
+        },
+      );
+    };
+
+    if (minMax === null) {
+      // Avoid flashing unfiltered data between min -> max event transitions.
+      this.pendingMinMaxClearTimer = window.setTimeout(() => {
+        this.pendingMinMaxClearTimer = null;
+        if (!this._isMounted) return;
+        applyMinMax(null);
+      }, 180);
+      return;
+    }
+
+    applyMinMax(minMax);
   };
 
   private onYilChanged = (e: any): void => {
@@ -1297,9 +1329,13 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
   };
 
   private onResetAll = (): void => {
+    if (this.pendingMinMaxClearTimer !== null) {
+      window.clearTimeout(this.pendingMinMaxClearTimer);
+      this.pendingMinMaxClearTimer = null;
+    }
     this.setState(
       {
-        viloyat: "",
+        viloyat: DEFAULT_INITIAL_REGION,
         tuman: "",
         mavsum: "",
         ekinTuri: "",
@@ -1594,7 +1630,8 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       if (normalizedMavsum) params.append("mavsum", normalizedMavsum);
       if (ekinTuri) params.append("ekin_turi", ekinTuri);
       if (fermerNom) params.append("fermer_nom", fermerNom);
-      if (minMax) params.append("min_max", minMax);
+      if (minMax && String(minMax).toLowerCase() !== "both")
+        params.append("min_max", minMax);
       if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
 
       const url = `https://sgm.uzspace.uz/api/v1/water/sources?${params.toString()}`;
@@ -1723,7 +1760,8 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       if (ekinTuri) params.append("ekin_turi", ekinTuri);
       if (fermerNom) params.append("fermer_nom", fermerNom);
       if (selectedWaterSource) params.append("manba_nomi", selectedWaterSource);
-      if (minMax) params.append("min_max", minMax);
+      if (minMax && String(minMax).toLowerCase() !== "both")
+        params.append("min_max", minMax);
       if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
 
       const url = `https://sgm.uzspace.uz/api/v1/water/canals?${params.toString()}`;
@@ -1951,8 +1989,14 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       if (hasField("fermer_nom") && fermerNom)
         clauses.push(`fermer_nom='${this.escapeArcGIS(fermerNom)}'`);
 
-      if (hasField("min_max") && minMax)
-        clauses.push(`min_max='${this.escapeArcGIS(String(minMax))}'`);
+      if (hasField("min_max") && minMax) {
+        const mm = String(minMax).trim().toLowerCase();
+        if (mm === "both") {
+          clauses.push(`(min_max='Min' OR min_max='Max')`);
+        } else {
+          clauses.push(`min_max='${this.escapeArcGIS(String(minMax))}'`);
+        }
+      }
 
       if (hasField("yil") && yil && /^\d{4}$/.test(yil)) {
         clauses.push(`yil=${Number(yil)}`);
@@ -1984,7 +2028,8 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     const params = new URLSearchParams(window.location.search);
     params.delete("water_source");
     params.delete("canal_name");
-    if (minMax) params.set("min_max", minMax);
+    if (minMax && String(minMax).toLowerCase() !== "both")
+      params.set("min_max", minMax);
     else params.delete("min_max");
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({ path: newUrl }, "", newUrl);

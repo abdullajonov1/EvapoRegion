@@ -7,12 +7,12 @@ import "./indicators.css";
 const translations: Record<string, Record<string, string>> = {
   "evapoCount.title": {
     "uz-latin": "Ekin maydonlari soni",
-    "uz-cyrillic": "Екин майдонлари сони",
+    "uz-cyrillic": "Экин майдонлари сони",
     ru: "Количество обрабатываемых полей",
   },
   "evapoArea.title": {
     "uz-latin": "Ekin maydonlari",
-    "uz-cyrillic": "Екин майдонлари",
+    "uz-cyrillic": "Экин майдонлари",
     ru: "Посевные площади",
   },
   "evapoYield.title": {
@@ -102,6 +102,7 @@ export default class EvapoIndicatorsV20 extends React.Component<
   private _sessionId =
     Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
   private _lastMinMaxKey = "";
+  private _pendingMinMaxClearTimer: any = null;
   private _jimuMapView: JimuMapView | null = null;
   private _containerRef = React.createRef<HTMLDivElement>();
   private _resizeObserver: ResizeObserver | null = null;
@@ -220,6 +221,8 @@ export default class EvapoIndicatorsV20 extends React.Component<
     this._isMounted = false;
     this.removeEventListeners();
     if (this._countTimer) clearInterval(this._countTimer);
+    if (this._pendingMinMaxClearTimer)
+      clearTimeout(this._pendingMinMaxClearTimer);
     this._countAbortController?.abort();
     this._areaAbortController?.abort();
     this._yieldAbortController?.abort();
@@ -465,6 +468,61 @@ export default class EvapoIndicatorsV20 extends React.Component<
     return raw;
   }
 
+  private getApostropheVariants(value: string): string[] {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const base = raw.replace(/[’`ʻ‘ʼ]/g, "'");
+    const variants = [
+      base,
+      base.replace(/'/g, "’"),
+      base.replace(/'/g, "`"),
+      base.replace(/'/g, "ʻ"),
+      base.replace(/'/g, "‘"),
+      base.replace(/'/g, "ʼ"),
+    ];
+
+    return Array.from(
+      new Set(variants.map((item) => item.trim()).filter(Boolean)),
+    );
+  }
+
+  private getRegionApiCandidates(value: any): string[] {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const expanded = new Set<string>();
+    const push = (candidate: string): void => {
+      const clean = String(candidate ?? "").trim();
+      if (!clean) return;
+      this.getApostropheVariants(clean).forEach((variant) =>
+        expanded.add(variant),
+      );
+    };
+
+    const hasCyrillic = /[\u0400-\u04FF]/.test(raw);
+    this.getApostropheVariants(raw).forEach((variant) => {
+      push(variant);
+
+      const lower = variant.toLowerCase();
+      if (hasCyrillic) {
+        if (lower.endsWith(" вилояти")) {
+          push(variant.slice(0, -" вилояти".length).trim());
+        } else {
+          push(`${variant} вилояти`);
+        }
+      } else {
+        if (lower.endsWith(" viloyati")) {
+          push(variant.slice(0, -" viloyati".length).trim());
+        } else if (!lower.endsWith(" viloyat")) {
+          push(`${variant} viloyati`);
+        }
+      }
+    });
+
+    return Array.from(expanded);
+  }
+
   private normalizeCropTypeValue(value: any): string {
     const raw = String(value ?? "").trim();
     if (!raw) return "";
@@ -486,15 +544,21 @@ export default class EvapoIndicatorsV20 extends React.Component<
   private onFilterChanged = (e: any): void => {
     const d = e?.detail || {};
     const newState: Partial<IndicatorsState> = {};
-    if (d.viloyat !== undefined) newState.viloyat = d.viloyat || "";
-    if (d.tuman !== undefined) newState.tuman = d.tuman || "";
-    if (d.mavsum !== undefined) newState.mavsum = d.mavsum || "";
+    if (d.viloyat !== undefined)
+      newState.viloyat = String(d.viloyat ?? this.state.viloyat).trim();
+    if (d.tuman !== undefined)
+      newState.tuman = String(d.tuman ?? this.state.tuman).trim();
+    if (d.mavsum !== undefined)
+      newState.mavsum = String(d.mavsum ?? this.state.mavsum).trim();
     if (d.mavsumForIndicators !== undefined) {
       newState.mavsumForCountArea = d.mavsumForIndicators || "";
     }
-    if (d.fermer_nom !== undefined) newState.fermerNom = d.fermer_nom || "";
+    if (d.fermer_nom !== undefined)
+      newState.fermerNom = String(d.fermer_nom ?? this.state.fermerNom).trim();
     if (d.fermer_nomNom !== undefined)
-      newState.fermerNom = d.fermer_nomNom || "";
+      newState.fermerNom = String(
+        d.fermer_nomNom ?? this.state.fermerNom,
+      ).trim();
     if (d.yil !== undefined) newState.yil = this.normalizeYearValue(d.yil);
     this.setState(newState as any, () => {
       this.fetchCountData();
@@ -568,17 +632,41 @@ export default class EvapoIndicatorsV20 extends React.Component<
       e?.detail?.min_max || e?.detail?.minMax || e?.detail?.value || "";
     const minMaxMode: "none" | "single" | "both" =
       e?.detail?.minMaxMode || (minMax ? "single" : "none");
-    const minMaxKey = `${minMaxMode}:${minMax}`;
-    if (minMaxKey === this._lastMinMaxKey) return;
-    this._lastMinMaxKey = minMaxKey;
-    this.setState({ minMax, minMaxMode }, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (this.state.cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      }
-    });
+
+    const applyMinMaxState = (
+      nextMinMax: string,
+      nextMode: "none" | "single" | "both",
+    ): void => {
+      const minMaxKey = `${nextMode}:${nextMinMax}`;
+      if (minMaxKey === this._lastMinMaxKey) return;
+      this._lastMinMaxKey = minMaxKey;
+      this.setState({ minMax: nextMinMax, minMaxMode: nextMode }, () => {
+        this.fetchCountData();
+        this.fetchAreaData();
+        if (this.state.cropType) {
+          this.fetchYieldData();
+          this.fetchEfficiencyData();
+        }
+      });
+    };
+
+    // Min -> Max transition can emit a brief intermediate "none" event.
+    // Defer clear slightly so we don't show unfiltered (general) values between states.
+    if (this._pendingMinMaxClearTimer) {
+      clearTimeout(this._pendingMinMaxClearTimer);
+      this._pendingMinMaxClearTimer = null;
+    }
+
+    if (minMaxMode === "none" && !minMax) {
+      this._pendingMinMaxClearTimer = setTimeout(() => {
+        this._pendingMinMaxClearTimer = null;
+        if (!this._isMounted) return;
+        applyMinMaxState("", "none");
+      }, 180);
+      return;
+    }
+
+    applyMinMaxState(minMax, minMaxMode);
   };
 
   private onYilChanged = (e: any): void => {
@@ -634,6 +722,10 @@ export default class EvapoIndicatorsV20 extends React.Component<
       },
       () => {
         this._lastMinMaxKey = "";
+        if (this._pendingMinMaxClearTimer) {
+          clearTimeout(this._pendingMinMaxClearTimer);
+          this._pendingMinMaxClearTimer = null;
+        }
         setTimeout(() => {
           this.fetchCountData();
           this.fetchAreaData();
@@ -645,15 +737,21 @@ export default class EvapoIndicatorsV20 extends React.Component<
   private onMasterStateUpdate = (e: any): void => {
     const d = e?.detail || {};
     const newState: Partial<IndicatorsState> = {};
-    if (d.viloyat !== undefined) newState.viloyat = d.viloyat || "";
-    if (d.tuman !== undefined) newState.tuman = d.tuman || "";
-    if (d.mavsum !== undefined) newState.mavsum = d.mavsum || "";
-    if (d.fermer_nom !== undefined) newState.fermerNom = d.fermer_nom || "";
+    if (d.viloyat !== undefined)
+      newState.viloyat = String(d.viloyat ?? this.state.viloyat).trim();
+    if (d.tuman !== undefined)
+      newState.tuman = String(d.tuman ?? this.state.tuman).trim();
+    if (d.mavsum !== undefined)
+      newState.mavsum = String(d.mavsum ?? this.state.mavsum).trim();
+    if (d.fermer_nom !== undefined)
+      newState.fermerNom = String(d.fermer_nom ?? this.state.fermerNom).trim();
     if (d.yil !== undefined) newState.yil = this.normalizeYearValue(d.yil);
     if (d.ekin_turi !== undefined)
       newState.cropType = this.normalizeCropTypeValue(d.ekin_turi);
-    if (d.manba_nomi !== undefined) newState.manbaNomi = d.manba_nomi || "";
-    if (d.kanal_nomi !== undefined) newState.kanalNomi = d.kanal_nomi || "";
+    if (d.manba_nomi !== undefined)
+      newState.manbaNomi = String(d.manba_nomi ?? this.state.manbaNomi).trim();
+    if (d.kanal_nomi !== undefined)
+      newState.kanalNomi = String(d.kanal_nomi ?? this.state.kanalNomi).trim();
     if (d.min_max !== undefined) {
       const minMaxValue = (d.min_max || "").toString();
       newState.minMax = minMaxValue === "both" ? "" : minMaxValue;
@@ -770,16 +868,16 @@ export default class EvapoIndicatorsV20 extends React.Component<
     this.setState({ countLoading: true, countError: "" });
 
     try {
+      let skipMavsum = false;
       const buildParams = (minMaxValue?: string, cropTypeValue?: string) => {
         const params = new URLSearchParams();
-        if (viloyat) params.append("viloyat", viloyat);
         if (tuman) params.append("tuman", tuman);
         const cropRaw = cropTypeValue ?? cropType ?? "";
         const cropParam = String(cropRaw).trim();
         // Skip mavsum when a specific crop is selected: crops like
         // Mosh/Sholi are secondary-season and would return 0 with the
         // default "Birlamchi va umummavsumiy" filter.
-        if (!cropParam) {
+        if (!cropParam && !skipMavsum) {
           const normalizedMavsum = this.normalizeMavsumForApi(
             mavsumForCountArea || mavsum,
           );
@@ -787,8 +885,8 @@ export default class EvapoIndicatorsV20 extends React.Component<
         }
         if (fermerNom) params.append("fermer_nom", fermerNom);
         if (cropParam) params.append("ekin_turi", cropParam);
-        if (manbaNomi) params.append("manba_nomi", manbaNomi);
-        if (kanalNomi) params.append("kanal_nomi", kanalNomi);
+        if (!tuman && manbaNomi) params.append("manba_nomi", manbaNomi);
+        if (!tuman && kanalNomi) params.append("kanal_nomi", kanalNomi);
         if (minMaxValue) params.append("min_max", minMaxValue);
         params.append("yil", yilStr);
         params.append("_session", this._sessionId);
@@ -801,19 +899,32 @@ export default class EvapoIndicatorsV20 extends React.Component<
 
       const fetchCountFor = async (minMaxValue?: string): Promise<number> => {
         const fetchSingle = async (cropCandidate?: string): Promise<number> => {
-          const params = buildParams(minMaxValue, cropCandidate);
-          const url = `https://sgm.uzspace.uz/api/v1/area/count_fields?${params.toString()}`;
-          const resp = await fetch(url, {
-            signal: this._countAbortController.signal,
-            headers: {
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const data = await resp.json();
-          return data.field_count || 0;
+          const regionCandidates = this.getRegionApiCandidates(viloyat);
+          const regionsToTry = regionCandidates.length
+            ? regionCandidates
+            : [""];
+          let best = 0;
+
+          for (const regionCandidate of regionsToTry) {
+            const params = buildParams(minMaxValue, cropCandidate);
+            if (regionCandidate) params.set("viloyat", regionCandidate);
+            const url = `https://sgm.uzspace.uz/api/v1/area/count_fields?${params.toString()}`;
+            const resp = await fetch(url, {
+              signal: this._countAbortController.signal,
+              headers: {
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+              },
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            const value = data.field_count || 0;
+            if (value > best) best = value;
+            if (value > 0) return value;
+          }
+
+          return best;
         };
 
         const candidates = this.getCropTypeApiCandidates(cropType);
@@ -835,12 +946,34 @@ export default class EvapoIndicatorsV20 extends React.Component<
         return best;
       };
 
-      const fieldCount =
+      let fieldCount =
         minMaxMode === "both"
           ? (
               await Promise.all([fetchCountFor("min"), fetchCountFor("max")])
             ).reduce((sum, value) => sum + (value || 0), 0)
           : await fetchCountFor(minMax || undefined);
+
+      // Mavsum-less fallback: some regions lack mavsum classification
+      if (fieldCount === 0 && !skipMavsum && (mavsumForCountArea || mavsum)) {
+        skipMavsum = true;
+        console.log(
+          "[EvapoIndicatorsV30] Count=0 with mavsum, retrying without mavsum...",
+        );
+        const retry =
+          minMaxMode === "both"
+            ? (
+                await Promise.all([fetchCountFor("min"), fetchCountFor("max")])
+              ).reduce((sum, value) => sum + (value || 0), 0)
+            : await fetchCountFor(minMax || undefined);
+        if (retry > 0) {
+          console.log(
+            "[EvapoIndicatorsV30] Mavsum-less fallback count:",
+            retry,
+          );
+          fieldCount = retry;
+        }
+      }
+
       if (this._isMounted) {
         this.setState({
           countLoading: false,
@@ -878,8 +1011,20 @@ export default class EvapoIndicatorsV20 extends React.Component<
     const hasValidYear = /^\d{4}$/.test(yilStr);
     if (!hasValidYear) {
       // Year hard gate — show dashes until year is selected
+      console.log("[EvapoIndicatorsV30] Skipping area fetch: no valid year", {
+        yil,
+      });
       return;
     }
+
+    console.log("[EvapoIndicatorsV30] Starting fetchAreaData:", {
+      viloyat,
+      tuman,
+      mavsum,
+      cropType,
+      minMaxMode,
+      yil,
+    });
 
     this._areaAbortController?.abort();
     this._areaAbortController = new AbortController();
@@ -887,15 +1032,15 @@ export default class EvapoIndicatorsV20 extends React.Component<
     this.setState({ areaLoading: true, areaError: "" });
 
     try {
+      let skipMavsum = false;
       const buildParams = (minMaxValue?: string, cropTypeValue?: string) => {
         const params = new URLSearchParams();
-        if (viloyat) params.append("viloyat", viloyat);
         if (tuman) params.append("tuman", tuman);
         const cropRaw = cropTypeValue ?? cropType ?? "";
         const cropParam = String(cropRaw).trim();
         // Skip mavsum when a specific crop is selected (same reason
         // as count: secondary-season crops return 0 otherwise).
-        if (!cropParam) {
+        if (!cropParam && !skipMavsum) {
           const normalizedMavsum = this.normalizeMavsumForApi(
             mavsumForCountArea || mavsum,
           );
@@ -903,8 +1048,8 @@ export default class EvapoIndicatorsV20 extends React.Component<
         }
         if (fermerNom) params.append("fermer_nom", fermerNom);
         if (cropParam) params.append("ekin_turi", cropParam);
-        if (manbaNomi) params.append("manba_nomi", manbaNomi);
-        if (kanalNomi) params.append("kanal_nomi", kanalNomi);
+        if (!tuman && manbaNomi) params.append("manba_nomi", manbaNomi);
+        if (!tuman && kanalNomi) params.append("kanal_nomi", kanalNomi);
         if (minMaxValue) params.append("min_max", minMaxValue);
         params.append("yil", yilStr);
         params.append("_t", Date.now().toString());
@@ -913,14 +1058,73 @@ export default class EvapoIndicatorsV20 extends React.Component<
 
       const fetchAreaFor = async (minMaxValue?: string): Promise<number> => {
         const fetchSingle = async (cropCandidate?: string): Promise<number> => {
-          const params = buildParams(minMaxValue, cropCandidate);
-          const url = `https://apiwater.sgm.uzspace.uz/api/v1/area/calculate_total_area?${params.toString()}`;
-          const resp = await fetch(url, {
-            signal: this._areaAbortController.signal,
-          });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const data = await resp.json();
-          return data.total_maydon ?? data.totalMaydonGa ?? 0;
+          const regionCandidates = this.getRegionApiCandidates(viloyat);
+          const regionsToTry = regionCandidates.length
+            ? regionCandidates
+            : [""];
+          let best = 0;
+          let lastErr: Error | null = null;
+
+          for (const regionCandidate of regionsToTry) {
+            const params = buildParams(minMaxValue, cropCandidate);
+            if (regionCandidate) params.set("viloyat", regionCandidate);
+            const qs = params.toString();
+            console.log(
+              "[EvapoIndicatorsV30] Fetching area with params:",
+              qs.substring(0, 150) + "...",
+            );
+            // Try sgm.uzspace.uz first (CORS-allowed), then apiwater as fallback
+            const domains = ["sgm.uzspace.uz", "apiwater.sgm.uzspace.uz"];
+            for (const domain of domains) {
+              try {
+                const url = `https://${domain}/api/v1/area/calculate_total_area?${qs}`;
+                console.log(
+                  "[EvapoIndicatorsV30] Trying domain:",
+                  domain,
+                  "region:",
+                  regionCandidate || viloyat,
+                );
+                const resp = await fetch(url, {
+                  signal: this._areaAbortController.signal,
+                });
+                if (!resp.ok) {
+                  lastErr = new Error(`HTTP ${resp.status}`);
+                  console.warn(
+                    "[EvapoIndicatorsV30] HTTP error from",
+                    domain,
+                    resp.status,
+                  );
+                  continue;
+                }
+                const data = await resp.json();
+                const result = data.total_maydon ?? data.totalMaydonGa ?? 0;
+                console.log(
+                  "[EvapoIndicatorsV30] Area result from",
+                  domain,
+                  ":",
+                  result,
+                );
+                if (result > best) best = result;
+                if (result > 0) return result;
+              } catch (e: any) {
+                if (e?.name === "AbortError") throw e;
+                lastErr = e instanceof Error ? e : new Error(String(e));
+                console.warn(
+                  "[EvapoIndicatorsV30] Fetch error from",
+                  domain,
+                  ":",
+                  lastErr.message,
+                );
+              }
+            }
+          }
+
+          if (best > 0) return best;
+          if (lastErr) {
+            console.error("[EvapoIndicatorsV30] All area domains failed");
+            throw lastErr;
+          }
+          return 0;
         };
 
         const candidates = this.getCropTypeApiCandidates(cropType);
@@ -942,17 +1146,39 @@ export default class EvapoIndicatorsV20 extends React.Component<
         return best;
       };
 
-      const totalArea =
+      let totalArea =
         minMaxMode === "both"
           ? (
               await Promise.all([fetchAreaFor("min"), fetchAreaFor("max")])
             ).reduce((sum, value) => sum + (value || 0), 0)
           : await fetchAreaFor(minMax || undefined);
+
+      // Mavsum-less fallback: some regions lack mavsum classification in the backend
+      if (totalArea === 0 && !skipMavsum && (mavsumForCountArea || mavsum)) {
+        skipMavsum = true;
+        console.log(
+          "[EvapoIndicatorsV30] Area=0 with mavsum, retrying without mavsum...",
+        );
+        const retry =
+          minMaxMode === "both"
+            ? (
+                await Promise.all([fetchAreaFor("min"), fetchAreaFor("max")])
+              ).reduce((sum, value) => sum + (value || 0), 0)
+            : await fetchAreaFor(minMax || undefined);
+        if (retry > 0) {
+          console.log("[EvapoIndicatorsV30] Mavsum-less fallback area:", retry);
+          totalArea = retry;
+        }
+      }
+
+      console.log("[EvapoIndicatorsV30] Final area result:", totalArea);
+
       if (this._isMounted) {
         this.setState({ areaLoading: false, totalArea });
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return;
+      console.error("[EvapoIndicatorsV30] Area fetch error:", err.message);
       if (this._isMounted) {
         this.setState({
           areaLoading: false,
@@ -997,8 +1223,8 @@ export default class EvapoIndicatorsV20 extends React.Component<
         if (normalizedMavsum) params.append("mavsum", normalizedMavsum);
         if (cropType) params.append("ekin_turi", cropType);
         if (fermerNom) params.append("fermer_nom", fermerNom);
-        if (manbaNomi) params.append("manba_nomi", manbaNomi);
-        if (kanalNomi) params.append("kanal_nomi", kanalNomi);
+        if (!tuman && manbaNomi) params.append("manba_nomi", manbaNomi);
+        if (!tuman && kanalNomi) params.append("kanal_nomi", kanalNomi);
         if (minMaxValue) params.append("min_max", minMaxValue);
         if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
         return params;
@@ -1088,8 +1314,8 @@ export default class EvapoIndicatorsV20 extends React.Component<
         if (normalizedMavsum) params.append("mavsum", normalizedMavsum);
         if (cropType) params.append("ekin_turi", cropType);
         if (minMaxValue) params.append("min_max", minMaxValue);
-        if (manbaNomi) params.append("manba_nomi", manbaNomi);
-        if (kanalNomi) params.append("kanal_nomi", kanalNomi);
+        if (!tuman && manbaNomi) params.append("manba_nomi", manbaNomi);
+        if (!tuman && kanalNomi) params.append("kanal_nomi", kanalNomi);
         if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
         return params;
       };

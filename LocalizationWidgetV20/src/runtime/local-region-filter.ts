@@ -302,21 +302,121 @@ export class LocalRegionFilterEngine {
     ds: QueriableDataSource | null,
     fieldName: string,
   ): string | null {
-    if (!ds || !fieldName) return null;
+    if (!ds || !fieldName) {
+      console.warn("[LocalRegionFilter] resolveFieldName: no ds or fieldName");
+      return null;
+    }
     try {
       const schema = (ds as any)?.getSchema?.();
       const fields = (schema as any)?.fields;
-      if (!fields) return null;
-      const target = fieldName.toLowerCase();
-      for (const key of Object.keys(fields)) {
-        if (String(key).toLowerCase() === target) return key;
+      if (!fields) {
+        console.warn("[LocalRegionFilter] resolveFieldName: no schema fields");
+        return null;
       }
-    } catch {}
+      const target = fieldName.toLowerCase();
+      const availableFields = Object.keys(fields);
+      console.log(
+        "[LocalRegionFilter] resolveFieldName: looking for",
+        fieldName,
+        "in fields:",
+        availableFields.slice(0, 10).join(", "),
+      );
+      for (const key of availableFields) {
+        if (String(key).toLowerCase() === target) {
+          console.log(
+            "[LocalRegionFilter] resolveFieldName: FOUND",
+            fieldName,
+            "→",
+            key,
+          );
+          return key;
+        }
+      }
+      console.warn(
+        "[LocalRegionFilter] resolveFieldName: NOT FOUND",
+        fieldName,
+      );
+    } catch (e) {
+      console.error("[LocalRegionFilter] resolveFieldName error:", e);
+    }
     return null;
   }
 
   private escapeArcGIS(value: string): string {
     return String(value || "").replace(/'/g, "''");
+  }
+
+  private getApostropheVariants(value: string): string[] {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const base = raw.replace(/[’`ʻ‘ʼ]/g, "'");
+    const variants = [
+      base,
+      base.replace(/'/g, "’"),
+      base.replace(/'/g, "`"),
+      base.replace(/'/g, "ʻ"),
+      base.replace(/'/g, "‘"),
+      base.replace(/'/g, "ʼ"),
+    ];
+
+    return this.sortDistinct(variants);
+  }
+
+  private getRegionValueVariants(value: string): string[] {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const baseVariants = this.getApostropheVariants(raw);
+    const expanded = new Set<string>();
+    const hasCyrillic = /[\u0400-\u04FF]/.test(raw);
+    const latinSuffix = " viloyati";
+    const cyrSuffix = " вилояти";
+
+    const push = (candidate: string): void => {
+      const clean = String(candidate ?? "").trim();
+      if (!clean) return;
+      expanded.add(clean);
+      this.getApostropheVariants(clean).forEach((variant) =>
+        expanded.add(variant),
+      );
+    };
+
+    baseVariants.forEach((variant) => {
+      push(variant);
+
+      const lower = variant.toLowerCase();
+      if (hasCyrillic) {
+        if (lower.endsWith(cyrSuffix)) {
+          push(variant.slice(0, -cyrSuffix.length).trim());
+        } else {
+          push(`${variant}${cyrSuffix}`);
+        }
+      } else {
+        if (lower.endsWith(latinSuffix)) {
+          push(variant.slice(0, -latinSuffix.length).trim());
+        } else if (!lower.endsWith(" viloyat")) {
+          push(`${variant}${latinSuffix}`);
+        }
+      }
+    });
+
+    return this.sortDistinct(Array.from(expanded));
+  }
+
+  private whereTextMatches(
+    field: string,
+    value: string,
+    aliases: string[] = [],
+  ): string {
+    const variants = this.sortDistinct([
+      ...this.getApostropheVariants(value),
+      ...aliases,
+    ]);
+    if (!variants.length) return "";
+    if (variants.length === 1)
+      return `${field}='${this.escapeArcGIS(variants[0])}'`;
+    return `(${variants.map((variant) => `${field}='${this.escapeArcGIS(variant)}'`).join(" OR ")})`;
   }
 
   whereEq(field: string, value: string, forceNumeric = false): string {
@@ -391,11 +491,46 @@ export class LocalRegionFilterEngine {
     const c: string[] = [];
     const ds = this.getActiveDs(filters);
 
+    console.log("[LocalRegionFilter] buildWhereClause called with filters:", {
+      viloyat: filters.viloyat,
+      tuman: filters.tuman,
+      yil: filters.yil,
+      dsId: (ds as any)?.id,
+    });
+
     // Helper: resolve field and push if present
     const pushIfHas = (field: string, value: string, forceNumeric = false) => {
-      if (!value || !ds) return;
+      if (!value || !ds) {
+        console.log("[LocalRegionFilter] pushIfHas skipped:", {
+          field,
+          value,
+          hasDs: !!ds,
+        });
+        return;
+      }
       const resolved = this.resolveFieldName(ds, field);
-      if (resolved) c.push(this.whereEq(resolved, value, forceNumeric));
+      console.log("[LocalRegionFilter] Field resolution:", {
+        field,
+        value,
+        resolved,
+      });
+      if (resolved) {
+        const clause =
+          !forceNumeric && field === "viloyat"
+            ? this.whereTextMatches(
+                resolved,
+                value,
+                this.getRegionValueVariants(value),
+              )
+            : this.whereEq(resolved, value, forceNumeric);
+        console.log("[LocalRegionFilter] WHERE clause built:", clause);
+        c.push(clause);
+      } else {
+        console.warn(
+          "[LocalRegionFilter] Field not found in datasource:",
+          field,
+        );
+      }
     };
 
     // Single-DS mode: include yil
@@ -424,7 +559,9 @@ export class LocalRegionFilterEngine {
     }
     pushIfHas("fermer_nom", filters.fermer_nom);
 
-    return c.length ? c.join(" AND ") : "1=1";
+    const result = c.length ? c.join(" AND ") : "1=1";
+    console.log("[LocalRegionFilter] Final WHERE clause:", result);
+    return result;
   }
 
   /**

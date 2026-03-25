@@ -27,6 +27,7 @@ import {
 import "./water-unified-widget.css";
 
 const DEFAULT_INITIAL_YEAR = "2025";
+const DEFAULT_INITIAL_REGION = "Farg'ona viloyati";
 
 // Interface for monthly data
 interface MonthlyData {
@@ -151,6 +152,7 @@ export default class WaterUnifiedWidget extends React.PureComponent<
   };
   private _pieLegendWidth: number = 145;
   private _resizeObserver: ResizeObserver | null = null;
+  private _pendingMinMaxClearTimer: number | null = null;
 
   constructor(props) {
     super(props);
@@ -193,7 +195,7 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       minMax: null,
       lastMinMaxEventTimestamp: 0,
       // Initialize base filters (will be updated from props if available)
-      viloyat: "",
+      viloyat: DEFAULT_INITIAL_REGION,
       tuman: "",
       mavsum: "",
       fermer_nomNom: "",
@@ -480,27 +482,46 @@ export default class WaterUnifiedWidget extends React.PureComponent<
         return;
       }
 
+      // Cancel any pending clear timer
+      if (this._pendingMinMaxClearTimer !== null) {
+        window.clearTimeout(this._pendingMinMaxClearTimer);
+        this._pendingMinMaxClearTimer = null;
+      }
+
+      const applyMinMax = (value: string | null): void => {
+        this.setState(
+          {
+            minMax: value,
+            lastMinMaxEventTimestamp: timestamp,
+          },
+          () => {
+            if (this.throttledFetchData?.cancel)
+              this.throttledFetchData.cancel();
+            this.waterUnifiedFetchData();
+            this.waterUnifiedUpdateUrlWithFilters();
+          },
+        );
+      };
+
+      // Defer null (clear) events to avoid flicker when rapidly switching
+      if (minMax === null) {
+        this._pendingMinMaxClearTimer = window.setTimeout(() => {
+          this._pendingMinMaxClearTimer = null;
+          if (!this._isMounted) return;
+          applyMinMax(null);
+        }, 180);
+        return;
+      }
+
       console.log(
         `[waterUnifiedHandleMinMaxSelection] Received min/max selection: ${minMax}`,
       );
-
-      this.setState(
-        {
-          minMax,
-          lastMinMaxEventTimestamp: timestamp,
-        },
-        () => {
-          // Min/Max toggle should feel immediate across widgets.
-          if (this.throttledFetchData?.cancel) this.throttledFetchData.cancel();
-          this.waterUnifiedFetchData();
-          this.waterUnifiedUpdateUrlWithFilters();
-        },
-      );
+      applyMinMax(minMax);
     }
   }
   handleWaterSupplyReset = () => {
     const alreadyReset =
-      !this.state.viloyat &&
+      (this.state.viloyat || "") === DEFAULT_INITIAL_REGION &&
       !this.state.tuman &&
       !this.state.mavsum &&
       !this.state.fermer_nomNom &&
@@ -511,10 +532,11 @@ export default class WaterUnifiedWidget extends React.PureComponent<
 
     this.setState(
       {
-        viloyat: "",
+        viloyat: DEFAULT_INITIAL_REGION,
         tuman: "",
         mavsum: "",
         fermer_nomNom: "",
+        yil: DEFAULT_INITIAL_YEAR,
         cropFieldFilters: {
           ...this.state.cropFieldFilters,
           selectedEkinTuri: "",
@@ -681,6 +703,106 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       .sort((a, b) => a.month - b.month);
   }
 
+  private sumMonthlyConsumptionItems(
+    ...groups: Array<
+      Array<
+        Pick<
+          MonthlyData,
+          "month" | "month_name" | "consumption_m3ha" | "total_consumption_m3"
+        >
+      >
+    >
+  ): Array<
+    Pick<
+      MonthlyData,
+      "month" | "month_name" | "consumption_m3ha" | "total_consumption_m3"
+    >
+  > {
+    const monthMap = new Map<
+      number,
+      Pick<
+        MonthlyData,
+        "month" | "month_name" | "consumption_m3ha" | "total_consumption_m3"
+      >
+    >();
+
+    groups.flat().forEach((item) => {
+      const month = this.resolveMonthIndex(item?.month, item?.month_name);
+      if (month < 1 || month > 12) return;
+
+      const existing = monthMap.get(month) || {
+        month,
+        month_name: String(item?.month_name ?? "").trim(),
+        consumption_m3ha: 0,
+        total_consumption_m3: 0,
+      };
+
+      monthMap.set(month, {
+        month,
+        month_name:
+          String(item?.month_name ?? "").trim() || existing.month_name,
+        consumption_m3ha:
+          this.parseMetricValue(existing.consumption_m3ha) +
+          this.parseMetricValue(item?.consumption_m3ha),
+        total_consumption_m3:
+          this.parseMetricValue(existing.total_consumption_m3) +
+          this.parseMetricValue(item?.total_consumption_m3),
+      });
+    });
+
+    return Array.from(monthMap.values()).sort((a, b) => a.month - b.month);
+  }
+
+  private sumMonthlySupplyItems(
+    ...groups: Array<
+      Array<
+        Pick<
+          MonthlyData,
+          "month" | "month_name" | "supply_m3ha" | "total_supply_m3"
+        >
+      >
+    >
+  ): Array<
+    Pick<
+      MonthlyData,
+      "month" | "month_name" | "supply_m3ha" | "total_supply_m3"
+    >
+  > {
+    const monthMap = new Map<
+      number,
+      Pick<
+        MonthlyData,
+        "month" | "month_name" | "supply_m3ha" | "total_supply_m3"
+      >
+    >();
+
+    groups.flat().forEach((item) => {
+      const month = this.resolveMonthIndex(item?.month, item?.month_name);
+      if (month < 1 || month > 12) return;
+
+      const existing = monthMap.get(month) || {
+        month,
+        month_name: String(item?.month_name ?? "").trim(),
+        supply_m3ha: 0,
+        total_supply_m3: 0,
+      };
+
+      monthMap.set(month, {
+        month,
+        month_name:
+          String(item?.month_name ?? "").trim() || existing.month_name,
+        supply_m3ha:
+          this.parseMetricValue(existing.supply_m3ha) +
+          this.parseMetricValue(item?.supply_m3ha),
+        total_supply_m3:
+          this.parseMetricValue(existing.total_supply_m3) +
+          this.parseMetricValue(item?.total_supply_m3),
+      });
+    });
+
+    return Array.from(monthMap.values()).sort((a, b) => a.month - b.month);
+  }
+
   private waterUnifiedHandleYilEvent = (e: any) => {
     const incoming =
       this.normalizeYearValue(e?.detail?.yil ?? "") || DEFAULT_INITIAL_YEAR;
@@ -730,6 +852,10 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       this._abortController = null;
     }
     if (this.throttledFetchData?.cancel) this.throttledFetchData.cancel();
+    if (this._pendingMinMaxClearTimer !== null) {
+      window.clearTimeout(this._pendingMinMaxClearTimer);
+      this._pendingMinMaxClearTimer = null;
+    }
 
     document.removeEventListener(
       "minMaxSelected",
@@ -888,20 +1014,12 @@ export default class WaterUnifiedWidget extends React.PureComponent<
 
   waterUnifiedHandleCropSelected(event) {
     if (event?.detail?.cropType !== undefined) {
-      const crop = event.detail.cropType;
+      const rawCrop = event.detail.cropType;
+      const nextCrop =
+        rawCrop === null || rawCrop === undefined ? "" : String(rawCrop).trim();
+      const prevCrop = this.state.cropFieldFilters.selectedEkinTuri || "";
 
-      // Skip clearing a crop selection from external event (e.g., EvapoCrop broadcasting crop=null)
-      // Only update if: 1) crop is explicitly set to a new value, or 2) crop stays null and is already null
-      const prevCrop = this.state.cropFieldFilters.selectedEkinTuri || null;
-      if (crop === null && prevCrop === null) {
-        return; // Already null, no-op
-      }
-      if (crop === null && prevCrop !== null) {
-        return; // Ignore external crop clear events
-      }
-      if (
-        (crop || "") === (this.state.cropFieldFilters.selectedEkinTuri || "")
-      ) {
+      if (nextCrop === prevCrop) {
         return;
       }
 
@@ -909,7 +1027,7 @@ export default class WaterUnifiedWidget extends React.PureComponent<
         (s) => ({
           cropFieldFilters: {
             ...s.cropFieldFilters,
-            selectedEkinTuri: crop,
+            selectedEkinTuri: nextCrop,
           },
         }),
         () => {
@@ -1141,44 +1259,64 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       const { selectedEkinTuri, selectedManbaNomi, selectedKanalNomi } =
         cropFieldFilters;
 
-      const queryParams = new URLSearchParams();
-      if (viloyat) queryParams.append("viloyat", viloyat);
-      if (tuman) queryParams.append("tuman", tuman);
-      const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
-      if (normalizedMavsum) queryParams.append("mavsum", normalizedMavsum);
-      if (fermer_nomNom) queryParams.append("fermer_nom", fermer_nomNom);
-      if (selectedEkinTuri) queryParams.append("ekin_turi", selectedEkinTuri);
-      if (selectedManbaNomi)
-        queryParams.append("manba_nomi", selectedManbaNomi);
-      if (selectedKanalNomi)
-        queryParams.append("kanal_nomi", selectedKanalNomi);
-      if (minMax) queryParams.append("min_max", minMax);
-      // ✅ YEAR
-      if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
+      const fetchConsumptionFor = async (minMaxValue?: string) => {
+        const queryParams = new URLSearchParams();
+        if (viloyat) queryParams.append("viloyat", viloyat);
+        if (tuman) queryParams.append("tuman", tuman);
+        const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
+        if (normalizedMavsum) queryParams.append("mavsum", normalizedMavsum);
+        if (fermer_nomNom) queryParams.append("fermer_nom", fermer_nomNom);
+        if (selectedEkinTuri) queryParams.append("ekin_turi", selectedEkinTuri);
+        if (selectedManbaNomi)
+          queryParams.append("manba_nomi", selectedManbaNomi);
+        if (selectedKanalNomi)
+          queryParams.append("kanal_nomi", selectedKanalNomi);
+        if (minMaxValue) queryParams.append("min_max", minMaxValue);
+        if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
 
-      const apiUrl = `https://sgm.uzspace.uz/api/v1/water/consumption?${queryParams.toString()}`;
+        const apiUrl = `https://sgm.uzspace.uz/api/v1/water/consumption?${queryParams.toString()}`;
 
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        signal,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-      });
-      if (signal.aborted) throw new Error("AbortError");
-      if (!response.ok)
-        throw new Error(`API request failed with status ${response.status}`);
+        const response = await fetch(apiUrl, {
+          method: "GET",
+          signal,
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        });
+        if (signal.aborted) throw new Error("AbortError");
+        if (!response.ok)
+          throw new Error(`API request failed with status ${response.status}`);
 
-      const data = await response.json();
-      if (signal.aborted) throw new Error("AbortError");
+        const data = await response.json();
+        if (signal.aborted) throw new Error("AbortError");
 
-      const totalConsumption = this.parseMetricValue(data.uwt_m3);
-      const monthlyConsumptionData = this.normalizeMonthlyConsumptionItems(
-        data.monthly_consumption_data || [],
-      );
+        return {
+          totalConsumption: this.parseMetricValue(data.uwt_m3),
+          monthlyData: this.normalizeMonthlyConsumptionItems(
+            data.monthly_consumption_data || [],
+          ),
+        };
+      };
 
-      return { totalConsumption, monthlyData: monthlyConsumptionData };
+      if (minMax && String(minMax).toLowerCase() === "both") {
+        const [minData, maxData] = await Promise.all([
+          fetchConsumptionFor("min"),
+          fetchConsumptionFor("max"),
+        ]);
+
+        return {
+          totalConsumption:
+            this.parseMetricValue(minData.totalConsumption) +
+            this.parseMetricValue(maxData.totalConsumption),
+          monthlyData: this.sumMonthlyConsumptionItems(
+            minData.monthlyData,
+            maxData.monthlyData,
+          ),
+        };
+      }
+
+      return await fetchConsumptionFor(minMax || undefined);
     } catch (error) {
       if (error.name === "AbortError" || error.message === "AbortError")
         throw new Error("AbortError");
@@ -1243,45 +1381,65 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       const { selectedEkinTuri, selectedManbaNomi, selectedKanalNomi } =
         cropFieldFilters;
 
-      const queryParams = new URLSearchParams();
-      if (viloyat) queryParams.append("viloyat", viloyat);
-      if (tuman) queryParams.append("tuman", tuman);
-      const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
-      if (normalizedMavsum) queryParams.append("mavsum", normalizedMavsum);
-      if (fermer_nomNom) queryParams.append("fermer_nom", fermer_nomNom);
-      if (selectedEkinTuri) queryParams.append("ekin_turi", selectedEkinTuri);
-      if (selectedManbaNomi)
-        queryParams.append("manba_nomi", selectedManbaNomi);
-      if (selectedKanalNomi)
-        queryParams.append("kanal_nomi", selectedKanalNomi);
-      if (minMax) queryParams.append("min_max", minMax);
-      // ✅ YEAR
-      if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
+      const fetchSupplyFor = async (minMaxValue?: string) => {
+        const queryParams = new URLSearchParams();
+        if (viloyat) queryParams.append("viloyat", viloyat);
+        if (tuman) queryParams.append("tuman", tuman);
+        const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
+        if (normalizedMavsum) queryParams.append("mavsum", normalizedMavsum);
+        if (fermer_nomNom) queryParams.append("fermer_nom", fermer_nomNom);
+        if (selectedEkinTuri) queryParams.append("ekin_turi", selectedEkinTuri);
+        if (selectedManbaNomi)
+          queryParams.append("manba_nomi", selectedManbaNomi);
+        if (selectedKanalNomi)
+          queryParams.append("kanal_nomi", selectedKanalNomi);
+        if (minMaxValue) queryParams.append("min_max", minMaxValue);
+        if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
 
-      const apiUrl = `https://sgm.uzspace.uz/api/v1/water/supply?${queryParams.toString()}`;
-      console.log("Fetching water supply data from:", apiUrl);
+        const apiUrl = `https://sgm.uzspace.uz/api/v1/water/supply?${queryParams.toString()}`;
+        console.log("Fetching water supply data from:", apiUrl);
 
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        signal,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-      });
-      if (signal.aborted) throw new Error("AbortError");
-      if (!response.ok)
-        throw new Error(`API request failed with status ${response.status}`);
+        const response = await fetch(apiUrl, {
+          method: "GET",
+          signal,
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        });
+        if (signal.aborted) throw new Error("AbortError");
+        if (!response.ok)
+          throw new Error(`API request failed with status ${response.status}`);
 
-      const data = await response.json();
-      if (signal.aborted) throw new Error("AbortError");
+        const data = await response.json();
+        if (signal.aborted) throw new Error("AbortError");
 
-      const totalSupply = this.parseMetricValue(data.awt_m3);
-      const monthlySupplyData = this.normalizeMonthlySupplyItems(
-        data.monthly_supply_data || [],
-      );
+        return {
+          totalSupply: this.parseMetricValue(data.awt_m3),
+          monthlyData: this.normalizeMonthlySupplyItems(
+            data.monthly_supply_data || [],
+          ),
+        };
+      };
 
-      return { totalSupply, monthlyData: monthlySupplyData };
+      if (minMax && String(minMax).toLowerCase() === "both") {
+        const [minData, maxData] = await Promise.all([
+          fetchSupplyFor("min"),
+          fetchSupplyFor("max"),
+        ]);
+
+        return {
+          totalSupply:
+            this.parseMetricValue(minData.totalSupply) +
+            this.parseMetricValue(maxData.totalSupply),
+          monthlyData: this.sumMonthlySupplyItems(
+            minData.monthlyData,
+            maxData.monthlyData,
+          ),
+        };
+      }
+
+      return await fetchSupplyFor(minMax || undefined);
     } catch (error) {
       if (error.name === "AbortError" || error.message === "AbortError")
         throw new Error("AbortError");

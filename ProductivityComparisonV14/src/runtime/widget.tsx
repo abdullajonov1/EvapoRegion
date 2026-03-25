@@ -21,6 +21,7 @@ import {
 } from "recharts";
 
 /** ✅ MAP (only used AFTER lasso selection) */
+import Graphic from "esri/Graphic";
 import FeatureLayer from "esri/layers/FeatureLayer";
 import GraphicsLayer from "esri/layers/GraphicsLayer";
 import { JimuMapView, JimuMapViewComponent } from "jimu-arcgis";
@@ -29,16 +30,8 @@ const API_BASE_URL = "https://apiwater.sgm.uzspace.uz/api/v1";
 const API_ENDPOINTS = {
   chartData: "/analytics/dynamic-xy-chart",
   chartFilters: "/analytics/xy-chart-filters",
+  chartBins: "/analytics/xy-chart-bins",
 };
-
-const RAW_ENDPOINT_CANDIDATES = [
-  "/analytics/xy-chart-2/raw",
-  "/analytics/xy-chart-2/raw-points",
-  "/analytics/xy-chart-2/points",
-  "/analytics/xy-chart-2/raw-from-bins",
-  "/analytics/xy-chart-raw-from-bins",
-  "/analytics/xy-chart-bins/raw",
-];
 
 const DEFAULT_BINS = 25; // fixed render grid 25x25
 
@@ -845,34 +838,85 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     return "uz";
   };
 
+  /** Fetch regions from /location/regions (most reliable source) */
+  private fetchLocationRegions = async (): Promise<string[]> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/location/regions`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json?.regions)
+        ? json.regions.map((r: any) => String(r ?? "").trim()).filter(Boolean)
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
+  /** Fetch districts from /location/districts (viloyat-filtered, most reliable for tumans) */
+  private fetchLocationDistricts = async (
+    viloyat: string,
+  ): Promise<string[]> => {
+    if (!viloyat) return [];
+    try {
+      const params = new URLSearchParams({ viloyat });
+      const res = await fetch(
+        `${API_BASE_URL}/location/districts?${params.toString()}`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json?.districts)
+        ? json.districts.map((d: any) => String(d ?? "").trim()).filter(Boolean)
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
   private async fetchDirectoryList(
     key: "Region" | "District",
     lang: "uz" | "kir" | "ru",
   ): Promise<string[]> {
     const typeCandidates = ["Evapo", "Evapo-RegionV20"];
-    for (const typeName of typeCandidates) {
-      try {
-        const url = `${API_BASE_URL}/directories/${encodeURIComponent(typeName)}?lang=${encodeURIComponent(lang)}&key=${encodeURIComponent(key)}`;
-        const response = await fetch(url, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) continue;
-        const json = await response.json();
-        const rows = Array.isArray(json)
-          ? json
-          : Array.isArray(json?.items)
-            ? json.items
-            : [];
-        const values = rows
-          .filter((row) => row && typeof row === "object")
-          .map((row) =>
-            String(row?.value ?? row?.label ?? row?.name ?? "").trim(),
-          )
-          .filter(Boolean);
-        if (values.length) return values;
-      } catch {
-        // try next type candidate
+    const baseUrls = [
+      API_BASE_URL,
+      "https://sgm.uzspace.uz/api/v1",
+      "https://apiwater.sgm.uzspace.uz/api/v1",
+    ];
+
+    for (const baseUrl of Array.from(new Set(baseUrls))) {
+      for (const typeName of typeCandidates) {
+        try {
+          const url = `${baseUrl}/directories/${encodeURIComponent(typeName)}?lang=${encodeURIComponent(lang)}&key=${encodeURIComponent(key)}`;
+          const response = await fetch(url, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) continue;
+          const json = await response.json();
+          const rows = Array.isArray(json)
+            ? json
+            : Array.isArray(json?.items)
+              ? json.items
+              : [];
+          const values = rows
+            .filter((row) => row && typeof row === "object")
+            .map((row) =>
+              String(row?.value ?? row?.label ?? row?.name ?? "").trim(),
+            )
+            .filter(Boolean);
+          if (values.length) return values;
+        } catch {
+          // try next candidate
+        }
       }
     }
 
@@ -1063,8 +1107,25 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     const key = this.normalizeLookupKey(value);
     const cache = this._dirTranslationCache[lang];
-    const translated =
+    let translated: string | undefined =
       kind === "region" ? cache?.region?.[key] : cache?.district?.[key];
+
+    // Retry: feature data may include "tumani"/"viloyati" suffix that the
+    // directory API cache does not, causing the key to miss.
+    if (!translated) {
+      if (kind === "district") {
+        const stripped = key
+          .replace(/\s+(tumani?|rayon|район)\s*$/i, "")
+          .trim();
+        if (stripped !== key) translated = cache?.district?.[stripped];
+      } else if (kind === "region") {
+        const stripped = key
+          .replace(/\s+(viloyati?|region|область)\s*$/i, "")
+          .trim();
+        if (stripped !== key) translated = cache?.region?.[stripped];
+      }
+    }
+
     if (translated) return translated;
 
     return lang === "uz_cyrl"
@@ -1083,6 +1144,21 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     if (key === "fermer_nom") return this.t("fermer");
     if (key === "tuman") return this.t("tuman");
     return this.t("ekinTuri");
+  };
+
+  private getLocalizedGroupedItemLabel = (
+    groupBy: GroupByType,
+    rawValue: string,
+  ): string => {
+    const value = String(rawValue ?? "").trim();
+    if (!value) return value;
+    if (groupBy === "tuman") {
+      return this.getLocalizedFilterValue("district", value);
+    }
+    if (groupBy === "ekin_turi") {
+      return this.getLocalizedFilterValue("crop", value);
+    }
+    return value;
   };
 
   /** Get metric label with localization */
@@ -1456,6 +1532,214 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       .trim();
   };
 
+  private normalizeRegionLookupKey = (value: string): string => {
+    return this.normalizeLoose(value)
+      .replace(/\bviloyati\b/g, "viloyat")
+      .replace(/\bвилояти\b/g, "вилоят");
+  };
+
+  private getApostropheVariants = (value: string): string[] => {
+    const base = String(value ?? "").trim();
+    if (!base) return [];
+
+    return Array.from(
+      new Set(
+        [
+          base,
+          base.replace(/[’ʻ`]/g, "'"),
+          base.replace(/[’ʻ`]/g, "ʻ"),
+          base.replace(/[’ʻ`]/g, "’"),
+          base.replace(/[’ʻ`]/g, "‘"),
+          base.replace(/[’ʻ`]/g, "ʼ"),
+        ]
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    );
+  };
+
+  private buildRegionValueVariants = (value: string): string[] => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const expanded = new Set<string>();
+    const push = (candidate: string): void => {
+      this.getApostropheVariants(candidate).forEach((variant) => {
+        const clean = variant.trim();
+        if (clean) expanded.add(clean);
+      });
+    };
+
+    this.getApostropheVariants(raw).forEach((variant) => {
+      push(variant);
+
+      const lower = variant.toLowerCase();
+      const isRepublic =
+        lower.endsWith(" respublikasi") || lower.endsWith(" республикаси");
+
+      if (isRepublic) return;
+
+      if (/[^\x00-\x7F]/.test(variant)) {
+        if (lower.endsWith(" вилояти")) {
+          const stem = variant.slice(0, -" вилояти".length).trim();
+          push(stem);
+          push(`${stem} вилоят`);
+        } else if (lower.endsWith(" вилоят")) {
+          const stem = variant.slice(0, -" вилоят".length).trim();
+          push(stem);
+          push(`${stem} вилояти`);
+        }
+      } else if (lower.endsWith(" viloyati")) {
+        const stem = variant.slice(0, -" viloyati".length).trim();
+        push(stem);
+        push(`${stem} viloyat`);
+      } else if (lower.endsWith(" viloyat")) {
+        const stem = variant.slice(0, -" viloyat".length).trim();
+        push(stem);
+        push(`${stem} viloyati`);
+      }
+    });
+
+    return Array.from(expanded);
+  };
+
+  private mergeUniqueByNormalizedKey = (
+    primary: string[],
+    secondary: string[],
+  ): string[] => {
+    const merged = new Map<string, string>();
+    const add = (value: string): void => {
+      const clean = String(value ?? "").trim();
+      if (!clean) return;
+      const key = this.normalizeRegionLookupKey(clean);
+      if (!key || merged.has(key)) return;
+      merged.set(key, clean);
+    };
+
+    primary.forEach(add);
+    secondary.forEach(add);
+
+    return Array.from(merged.values());
+  };
+
+  private resolveViloyatForApi = (
+    value: string,
+    options: string[] = this.state.viloyat,
+  ): string => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+
+    const cleanOptions = (Array.isArray(options) ? options : [])
+      .map((option) => String(option ?? "").trim())
+      .filter(Boolean);
+    if (!cleanOptions.length) return raw;
+
+    const rawKey = this.normalizeRegionLookupKey(raw);
+    const exactMatch = cleanOptions.find(
+      (option) => this.normalizeRegionLookupKey(option) === rawKey,
+    );
+    if (exactMatch) return exactMatch;
+
+    const candidateKeys = new Set(
+      this.buildRegionValueVariants(raw)
+        .map((candidate) => this.normalizeRegionLookupKey(candidate))
+        .filter(Boolean),
+    );
+    const looseMatch = cleanOptions.find((option) =>
+      candidateKeys.has(this.normalizeRegionLookupKey(option)),
+    );
+
+    if (looseMatch) return looseMatch;
+
+    const nRaw = this.normalizeRegionLookupKey(raw);
+    const isQashqadaryo =
+      nRaw.includes("qashqad") ||
+      nRaw.includes("qashkad") ||
+      nRaw.includes("kashkad") ||
+      nRaw.includes("қашқад") ||
+      nRaw.includes("кашкад");
+
+    if (isQashqadaryo) {
+      const qashOptions = cleanOptions.filter((option) => {
+        const n = this.normalizeRegionLookupKey(option);
+        return (
+          n.includes("qashqad") ||
+          n.includes("qashkad") ||
+          n.includes("kashkad") ||
+          n.includes("қашқад") ||
+          n.includes("кашкад")
+        );
+      });
+
+      const canonicalQash =
+        qashOptions.find((option) =>
+          this.normalizeRegionLookupKey(option).endsWith("viloyat"),
+        ) || qashOptions[0];
+      if (canonicalQash) return canonicalQash;
+    }
+
+    return raw;
+  };
+
+  private escapeSqlText = (value: string): string => {
+    return String(value ?? "").replace(/'/g, "''");
+  };
+
+  private buildTextValueVariants = (
+    value: string,
+    kind: "generic" | "region" = "generic",
+  ): string[] => {
+    return kind === "region"
+      ? this.buildRegionValueVariants(value)
+      : this.getApostropheVariants(value);
+  };
+
+  private buildExactTextWhere = (
+    fieldName: string,
+    value: string,
+    kind: "generic" | "region" = "generic",
+  ): string => {
+    const clauses = this.buildTextValueVariants(value, kind)
+      .map((variant) => `${fieldName} = '${this.escapeSqlText(variant)}'`)
+      .filter(Boolean);
+
+    if (!clauses.length) return "";
+    if (clauses.length === 1) return clauses[0];
+    return `(${clauses.join(" OR ")})`;
+  };
+
+  private combineWhereClauses = (
+    ...clauses: Array<string | null | undefined>
+  ): string => {
+    const clean = clauses
+      .map((clause) => String(clause ?? "").trim())
+      .filter(Boolean);
+
+    if (!clean.length) return "";
+    if (clean.length === 1) return clean[0];
+    return clean.map((clause) => `(${clause})`).join(" AND ");
+  };
+
+  private buildContextFilterWhere = (layer: FeatureLayer): string => {
+    const selectedViloyat = this.resolveViloyatForApi(
+      this.state.selectedViloyat,
+    );
+    if (!selectedViloyat) return "";
+
+    const viloyatField =
+      this.resolveFieldName(layer, "viloyat") ||
+      this.resolveFieldName(layer, "viloyat_nom") ||
+      this.resolveFieldName(layer, "region") ||
+      null;
+
+    // Return "" if no viloyat-like field exists in this layer.
+    // Region-specific layers (e.g. Water_Kashkadarya_region_2025_year) often have
+    // no viloyat column — probing a non-existent field causes a server error that
+    // gets swallowed as matched=0, hiding valid GlobalID matches entirely.
+    if (!viloyatField) return "";
+    return this.buildExactTextWhere(viloyatField, selectedViloyat, "region");
+  };
+
   private pickPreferredOption = (
     options: string[],
     preferred: string,
@@ -1497,11 +1781,12 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     const params = new URLSearchParams();
 
     const yil = (overrides?.yil ?? this.state.selectedYil ?? "").trim();
-    const viloyat = (
+    const rawViloyat = (
       overrides?.viloyat ??
       this.state.selectedViloyat ??
       ""
     ).trim();
+    const viloyat = this.resolveViloyatForApi(rawViloyat);
     const tuman = (overrides?.tuman ?? this.state.selectedTuman ?? "").trim();
     const ekin_turi = (
       overrides?.ekin_turi ??
@@ -1537,11 +1822,12 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     const params = new URLSearchParams();
 
     const yil = (overrides?.yil ?? this.state.selectedYil ?? "").trim();
-    const viloyat = (
+    const rawViloyat = (
       overrides?.viloyat ??
       this.state.selectedViloyat ??
       ""
     ).trim();
+    const viloyat = this.resolveViloyatForApi(rawViloyat);
 
     if (yil) params.set("yil", yil);
 
@@ -1588,13 +1874,30 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     const json = (await res.json()) as Partial<ApiFiltersResponse>;
 
+    // Merge viloyat from multiple reliable sources
+    let mergedViloyat: string[] = Array.isArray(json?.viloyat)
+      ? json!.viloyat
+      : [];
+    if (!onlyYear) {
+      const [directoryViloyat, locationRegions] = await Promise.all([
+        this.fetchDirectoryList("Region", "uz"),
+        this.fetchLocationRegions(),
+      ]);
+      mergedViloyat = this.mergeUniqueByNormalizedKey(
+        mergedViloyat,
+        directoryViloyat,
+      );
+      mergedViloyat = this.mergeUniqueByNormalizedKey(
+        mergedViloyat,
+        locationRegions,
+      );
+    }
+
     return {
       yil: this.uniqueSorted(
         (Array.isArray(json?.yil) ? json!.yil : []).map(String),
       ),
-      viloyat: this.uniqueSorted(
-        Array.isArray(json?.viloyat) ? json!.viloyat : [],
-      ),
+      viloyat: this.uniqueSorted(mergedViloyat),
       tuman: this.uniqueSorted(Array.isArray(json?.tuman) ? json!.tuman : []),
       ekin_turi: this.uniqueSorted(
         Array.isArray(json?.ekin_turi) ? json!.ekin_turi : [],
@@ -1633,22 +1936,51 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         return;
       }
 
+      // Step 2: Fetch options - pass the SELECTED viloyat so tumans/ekin_turi/mavsum are viloyat-specific
+      // (viloyat dropdown itself is always merged from directories + /location/regions)
       const opts = await this.fetchDropdownOptions(false, {
         yil: selectedYil,
-        viloyat: "",
+        // Do NOT override viloyat to "" — let it use this.state.selectedViloyat
+        // so that xy-chart-filters returns viloyat-specific tumans/ekin_turi/mavsum
       });
       if (!this._isMounted) return;
 
-      const selectedViloyatFromState =
-        this.state.selectedViloyat &&
-        opts.viloyat.includes(this.state.selectedViloyat)
-          ? this.state.selectedViloyat
-          : "";
+      console.log("[refreshCascadingOptions] Step 2 result:", {
+        stateViloyat: this.state.selectedViloyat,
+        selectedYil,
+        viloyatOptions: opts.viloyat,
+        tumanCount: opts.tuman?.length,
+        tumanSample: opts.tuman?.slice(0, 5),
+      });
+
+      const selectedViloyatFromState = this.resolveViloyatForApi(
+        this.state.selectedViloyat,
+        opts.viloyat,
+      );
       const selectedViloyat =
         selectedViloyatFromState ||
         this.pickPreferredOption(opts.viloyat, DEFAULT_INITIAL_REGION, [
           ...DEFAULT_INITIAL_REGION_ALIASES,
-        ]);
+        ]) ||
+        opts.viloyat[0] ||
+        "";
+
+      // Step 3: If viloyat is selected, also fetch tumans from /location/districts
+      // and merge — xy-chart-filters may not return all tumans for every viloyat
+      if (selectedViloyat) {
+        const resolvedViloyat = this.resolveViloyatForApi(
+          selectedViloyat,
+          opts.viloyat,
+        );
+        const locationDistricts = await this.fetchLocationDistricts(
+          resolvedViloyat || selectedViloyat,
+        );
+        if (locationDistricts.length) {
+          opts.tuman = this.uniqueSorted(
+            this.mergeUniqueByNormalizedKey(opts.tuman, locationDistricts),
+          );
+        }
+      }
 
       const selectedTuman =
         this.state.selectedTuman &&
@@ -1695,7 +2027,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     this.setState(
       {
         selectedYil: DEFAULT_INITIAL_YEAR,
-        selectedViloyat: DEFAULT_INITIAL_REGION,
+        selectedViloyat: "",
         selectedTuman: "",
         selectedEkin_turi: "",
         selectedMavsum: "",
@@ -1842,6 +2174,12 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     } catch {}
 
     try {
+      (layer as any).minScale = 0;
+      (layer as any).maxScale = 0;
+      (layer as any).opacity = 0.9;
+    } catch {}
+
+    try {
       layer.definitionExpression = "1=1"; // show everything for that layer
       layer.visible = true;
     } catch (e: any) {
@@ -1876,7 +2214,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     this.setState(
       {
         selectedYil: DEFAULT_INITIAL_YEAR,
-        selectedViloyat: DEFAULT_INITIAL_REGION,
+        selectedViloyat: "",
         selectedTuman: "",
         selectedEkin_turi: "",
         selectedMavsum: "",
@@ -1946,18 +2284,64 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       await layer.load();
     } catch {}
 
-    // Resolve ID field name safely
-    const configuredIdField = this.getGlobalIdField();
-    const idField =
-      this.resolveFieldName(layer, configuredIdField) ||
-      this.resolveFieldName(layer, "globalid") ||
-      this.resolveFieldName(layer, "GlobalID") ||
-      "globalid";
-
     // Your layer stores "{GUID}" strings, so always match BOTH variants
     const coreId = this.normalizeGuid(gid);
+    const idFieldRaw = await this.resolveBestIdFieldForSourceIds(layer, [
+      coreId,
+    ]);
+    const idField =
+      this.resolveFieldName(layer, idFieldRaw) ||
+      this.resolveFieldName(layer, "globalid") ||
+      idFieldRaw;
     const values = this.guidVariants(coreId); // [GUID, {GUID}]
-    const where = this.buildWhereForIds(idField, values, 200);
+    const idWhere = this.buildWhereForIds(idField, values, 200);
+    const contextWhere = this.buildContextFilterWhere(layer);
+    let where = this.combineWhereClauses(idWhere, contextWhere);
+
+    let matched = 0;
+    try {
+      // IMPORTANT: disable definitionExpression="1=0" during probe
+      matched = await this.withDefinitionExpressionDisabled(layer, async () =>
+        Number((await layer.queryFeatureCount({ where } as any)) ?? 0),
+      );
+    } catch {
+      matched = 0;
+    }
+
+    // Fallback: if context filter gives 0, retry with ID-only WHERE
+    if (matched <= 0 && contextWhere) {
+      try {
+        const idOnly = await this.withDefinitionExpressionDisabled(
+          layer,
+          async () =>
+            Number(
+              (await layer.queryFeatureCount({ where: idWhere } as any)) ?? 0,
+            ),
+        );
+        if (idOnly > 0) {
+          matched = idOnly;
+          where = idWhere;
+        }
+      } catch {}
+    }
+
+    if (matched <= 0) {
+      layer.visible = false;
+      layer.definitionExpression = "1=0";
+      this.setState({
+        mapSelectedCount: 0,
+        mapError: "Tanlangan polygon topilmadi.",
+        focusedGlobalId: coreId,
+      });
+      return;
+    }
+
+    try {
+      const gl = view.map.findLayerById(
+        SELECTION_LAYER_ID,
+      ) as __esri.GraphicsLayer;
+      if (gl) gl.removeAll();
+    } catch {}
 
     // Show only this polygon
     try {
@@ -1980,7 +2364,8 @@ export default class YieldWaterChartWidget extends React.PureComponent<
           duration: 450,
         });
         this.setState({
-          mapSelectedCount: 1,
+          activePolygonLayerId: layer.id,
+          mapSelectedCount: matched,
           mapError: null,
           focusedGlobalId: coreId,
         });
@@ -2009,7 +2394,8 @@ export default class YieldWaterChartWidget extends React.PureComponent<
           duration: 450,
         });
         this.setState({
-          mapSelectedCount: 1,
+          activePolygonLayerId: layer.id,
+          mapSelectedCount: matched,
           mapError: null,
           focusedGlobalId: coreId,
         });
@@ -2158,7 +2544,192 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     return t.includes("guid") || t.includes("globalid");
   };
 
+  private getIdFieldCandidates = (layer: FeatureLayer): string[] => {
+    const preferred = [
+      this.getGlobalIdField(),
+      "idd",
+      "id",
+      this.getNameField(),
+      "name",
+      "gid",
+    ];
+
+    // 1) Fields present in layer.fields
+    const resolvedFromFields = preferred
+      .map((field) => this.resolveFieldName(layer, field))
+      .filter(Boolean) as string[];
+
+    // 2) GlobalID is a reserved ArcGIS field ALWAYS queryable via REST
+    //    even when NOT listed in layer.fields (common for hosted feature services).
+    //    Force it unconditionally so it is always probed.
+    const metaGlobalId = String((layer as any)?.globalIdField || "").trim();
+    const forceGlobal = [
+      metaGlobalId || "GlobalID", // use what the layer reports; fallback = "GlobalID"
+      "globalid", // lowercase alias — ArcGIS REST is case-insensitive
+    ].filter(Boolean);
+
+    // 3) objectId — low-priority fallback (integer, usually won't match GUID)
+    const metaObjectId = String((layer as any)?.objectIdField || "").trim();
+    const forceObjectId = metaObjectId ? [metaObjectId] : [];
+
+    // Order: known field matches first, then GlobalID, then objectId last
+    return Array.from(
+      new Set([...resolvedFromFields, ...forceGlobal, ...forceObjectId]),
+    );
+  };
+
+  private async withDefinitionExpressionDisabled<T>(
+    layer: FeatureLayer,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const prev = (layer as any)?.definitionExpression;
+    const shouldReset = typeof prev === "string" && prev.trim().length > 0;
+
+    if (shouldReset) {
+      try {
+        (layer as any).definitionExpression = "";
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      return await fn();
+    } finally {
+      if (shouldReset) {
+        try {
+          (layer as any).definitionExpression = prev;
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  private resolveBestIdFieldForSourceIds = async (
+    layer: FeatureLayer,
+    sourceIds: string[],
+  ): Promise<string> => {
+    const candidates = this.getIdFieldCandidates(layer);
+    if (!candidates.length) return this.getGlobalIdField() || "globalid";
+
+    const normalized = (sourceIds || [])
+      .map((id) => this.normalizeGuid(String(id || "")))
+      .filter(Boolean);
+    if (!normalized.length) return candidates[0];
+
+    const probeValues = [
+      ...new Set(
+        normalized.slice(0, 20).flatMap((id) => this.guidVariants(id)),
+      ),
+    ];
+    if (!probeValues.length) return candidates[0];
+
+    for (const field of candidates) {
+      const where = this.buildWhereForIds(field, probeValues, 40);
+      try {
+        const count = await this.withDefinitionExpressionDisabled(
+          layer,
+          async () => {
+            return Number(
+              (await layer.queryFeatureCount({ where } as any)) ?? 0,
+            );
+          },
+        );
+
+        if (count > 0) return field;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    return candidates[0];
+  };
+
   /** ✅ Pick which selected layer to use for the current selectedYil (2024/2025) */
+  private scoreUseDataSourceForCurrentContext = async (
+    useDs: any,
+    year: string,
+  ): Promise<number> => {
+    let score = 0;
+
+    try {
+      const label = await this.getUseDsLabel(useDs);
+      if (year && label && label.includes(year)) score += 10;
+
+      const ds = await this.dsManager.createDataSourceByUseDataSource(
+        Immutable(useDs) as IMUseDataSource,
+      );
+      const json = (ds as any)?.getDataSourceJson?.() ?? null;
+      const layer =
+        (ds as any)?.layer ||
+        (typeof (ds as any)?.getLayer === "function"
+          ? await (ds as any).getLayer()
+          : null);
+
+      const url = String(((layer as any)?.url || json?.url) ?? "").trim();
+      const geometryType = String(
+        (layer as any)?.geometryType || (json as any)?.geometryType || "",
+      ).toLowerCase();
+      if (geometryType.includes("polygon")) score += 8;
+
+      const fields =
+        (layer as any)?.fields ||
+        (ds as any)?.getSchema?.()?.fields ||
+        (json as any)?.schema?.fields ||
+        [];
+
+      const fieldNames = Array.isArray(fields)
+        ? fields.map((f) => String((f as any)?.name || "").toLowerCase())
+        : Object.keys(fields || {}).map((k) => String(k || "").toLowerCase());
+
+      if (fieldNames.includes("viloyat") || fieldNames.includes("viloyat_nom"))
+        score += 4;
+      if (fieldNames.includes("tuman") || fieldNames.includes("tuman_nom"))
+        score += 2;
+      if (
+        fieldNames.includes("globalid") ||
+        fieldNames.includes("idd") ||
+        fieldNames.includes("id") ||
+        fieldNames.includes("name")
+      )
+        score += 3;
+
+      const selectedViloyat = this.resolveViloyatForApi(
+        this.state.selectedViloyat,
+      );
+      if (selectedViloyat && url) {
+        const probeLayer = new FeatureLayer({ url });
+        try {
+          await probeLayer.load();
+          const viloyatField =
+            this.resolveFieldName(probeLayer, "viloyat") ||
+            this.resolveFieldName(probeLayer, "viloyat_nom") ||
+            this.resolveFieldName(probeLayer, "region");
+
+          if (viloyatField) {
+            const where = this.buildExactTextWhere(
+              viloyatField,
+              selectedViloyat,
+              "region",
+            );
+            const count = Number(
+              (await probeLayer.queryFeatureCount({ where } as any)) ?? 0,
+            );
+            if (count > 0) score += 30;
+            else score -= 15;
+          }
+        } catch {
+          // ignore probe errors
+        }
+      }
+    } catch {
+      // keep accumulated score
+    }
+
+    return score;
+  };
+
   private pickUseDataSourceForYear = async (
     year?: string,
   ): Promise<any | null> => {
@@ -2166,16 +2737,15 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     if (!list.length) return null;
 
     const y = String(year ?? this.state.selectedYil ?? "").trim();
-    if (!y) return list[0];
+    const scored: Array<{ useDs: any; score: number }> = [];
 
-    // Try to pick a DS whose label contains the year
-    for (const u of list) {
-      const label = await this.getUseDsLabel(u);
-      if (label && label.includes(y)) return u;
+    for (const useDs of list) {
+      const score = await this.scoreUseDataSourceForCurrentContext(useDs, y);
+      scored.push({ useDs, score });
     }
 
-    // Fallback: first selected
-    return list[0];
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0]?.useDs || list[0];
   };
 
   /**
@@ -2198,25 +2768,17 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       );
       const json = (ds as any)?.getDataSourceJson?.() ?? null;
 
-      // 1) Preferred: DS already has a real layer instance
       const existingLayer =
         (ds as any)?.layer ||
         (typeof (ds as any)?.getLayer === "function"
           ? await (ds as any).getLayer()
           : null);
 
-      if (
-        existingLayer &&
-        typeof (existingLayer as any).queryFeatures === "function"
-      ) {
-        const fl = existingLayer as FeatureLayer;
-        this._queryLayerByUseDsKey.set(key, fl);
-        return fl;
-      }
-
-      // 2) Fallback: DS json has url
-      const url = String(json?.url ?? "").trim();
+      const url = String(
+        ((existingLayer as any)?.url || json?.url) ?? "",
+      ).trim();
       if (url) {
+        // Use a fresh query layer to avoid shared definitionExpression side effects.
         const fl = new FeatureLayer({ url });
         this._queryLayerByUseDsKey.set(key, fl);
         return fl;
@@ -2483,18 +3045,20 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     const chunks = this.chunkArray(clean, 80); // safe chunk size for GUID IN lists
     const all: __esri.Graphic[] = [];
 
-    for (const chunk of chunks) {
-      const whereChunk = this.buildWhereForIds(idField, chunk, chunk.length);
+    await this.withDefinitionExpressionDisabled(layer, async () => {
+      for (const chunk of chunks) {
+        const whereChunk = this.buildWhereForIds(idField, chunk, chunk.length);
 
-      const fs = await layer.queryFeatures({
-        where: whereChunk,
-        outFields,
-        returnGeometry: true,
-      } as any);
+        const fs = await layer.queryFeatures({
+          where: whereChunk,
+          outFields,
+          returnGeometry: false,
+        } as any);
 
-      const feats = (fs?.features || []) as __esri.Graphic[];
-      all.push(...feats);
-    }
+        const feats = (fs?.features || []) as __esri.Graphic[];
+        all.push(...feats);
+      }
+    });
 
     // de-dupe by idField (some servers may return duplicates)
     const seen = new Set<string>();
@@ -2510,13 +3074,183 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     return uniq;
   };
 
+  private buildCurrentLayerFilterWhere = (layer: FeatureLayer): string => {
+    const clauses: string[] = [];
+
+    const contextWhere = this.buildContextFilterWhere(layer);
+    if (contextWhere) clauses.push(contextWhere);
+
+    if (this.state.selectedTuman) {
+      const tumanField =
+        this.resolveFieldName(layer, "tuman") ||
+        this.resolveFieldName(layer, "tuman_nom") ||
+        this.resolveFieldName(layer, "district") ||
+        null;
+      if (tumanField) {
+        clauses.push(
+          this.buildExactTextWhere(tumanField, this.state.selectedTuman),
+        );
+      }
+    }
+
+    if (this.state.selectedEkin_turi) {
+      const ekinField =
+        this.resolveFieldName(layer, "ekin_turi") ||
+        this.resolveFieldName(layer, "ekin_turi_nomi") ||
+        this.resolveFieldName(layer, "crop_type") ||
+        null;
+      if (ekinField) {
+        clauses.push(
+          this.buildExactTextWhere(ekinField, this.state.selectedEkin_turi),
+        );
+      }
+    }
+
+    if (this.state.selectedMavsum) {
+      const mavsumField =
+        this.resolveFieldName(layer, "mavsum") ||
+        this.resolveFieldName(layer, "season") ||
+        null;
+      if (mavsumField) {
+        clauses.push(
+          this.buildExactTextWhere(mavsumField, this.state.selectedMavsum),
+        );
+      }
+    }
+
+    return this.combineWhereClauses(...clauses);
+  };
+
+  private formatSqlNumber = (value: number): string => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "0";
+    return String(Number(num.toFixed(10)));
+  };
+
+  private buildSelectedBinMetricWhere = (layer: FeatureLayer): string => {
+    const xRange = this.state.xRange;
+    const yRange = this.state.yRange;
+    if (!xRange || !yRange) return "";
+
+    const xField = this.resolveFieldName(layer, this.state.selectedXMetric);
+    const yField = this.resolveFieldName(layer, this.state.selectedYMetric);
+    if (!xField || !yField) return "";
+
+    const selectedSet = new Set(this.state.selectedBinKeys || []);
+    const selectedBins = (this.state.chartData || []).filter((bin) =>
+      selectedSet.has(this.binKey(bin)),
+    );
+    if (!selectedBins.length) return "";
+
+    const xHalf = Number(xRange.binSize) / 2;
+    const yHalf = Number(yRange.binSize) / 2;
+    if (
+      !Number.isFinite(xHalf) ||
+      !Number.isFinite(yHalf) ||
+      xHalf <= 0 ||
+      yHalf <= 0
+    ) {
+      return "";
+    }
+
+    const tolX = Math.abs(xRange.binSize) * 1e-6;
+    const tolY = Math.abs(yRange.binSize) * 1e-6;
+
+    const binClauses = selectedBins
+      .map((bin) => {
+        const xCenter = Number(bin.x_value);
+        const yCenter = Number(bin.y_value);
+        if (!Number.isFinite(xCenter) || !Number.isFinite(yCenter)) return "";
+
+        const xMin = this.formatSqlNumber(xCenter - xHalf);
+        const xMax = this.formatSqlNumber(xCenter + xHalf);
+        const yMin = this.formatSqlNumber(yCenter - yHalf);
+        const yMax = this.formatSqlNumber(yCenter + yHalf);
+
+        const xUpperOp =
+          Math.abs(xCenter + xHalf - xRange.max) <= tolX ? "<=" : "<";
+        const yUpperOp =
+          Math.abs(yCenter + yHalf - yRange.max) <= tolY ? "<=" : "<";
+
+        return `(${xField} >= ${xMin} AND ${xField} ${xUpperOp} ${xMax} AND ${yField} >= ${yMin} AND ${yField} ${yUpperOp} ${yMax})`;
+      })
+      .filter(Boolean);
+
+    if (!binClauses.length) return "";
+
+    return this.combineWhereClauses(
+      binClauses.length === 1 ? binClauses[0] : `(${binClauses.join(" OR ")})`,
+      this.buildCurrentLayerFilterWhere(layer),
+    );
+  };
+
+  private queryPolygonsBySelectedBinRanges = async (
+    layer: FeatureLayer,
+    outFields: string[],
+  ): Promise<__esri.Graphic[]> => {
+    const where = this.buildSelectedBinMetricWhere(layer);
+    if (!where) return [];
+    return await this.queryFeaturesByWhereChunked(layer, where, outFields);
+  };
+
+  private mapFeaturesToRawPoints = (
+    layer: FeatureLayer,
+    features: __esri.Graphic[],
+  ): RawPoint[] => {
+    const idField =
+      this.resolveFieldName(layer, "globalid") ||
+      String((layer as any)?.globalIdField || "").trim() ||
+      this.resolveFieldName(layer, "id") ||
+      this.resolveFieldName(layer, "idd") ||
+      "globalid";
+    const xField =
+      this.resolveFieldName(layer, this.state.selectedXMetric) ||
+      this.state.selectedXMetric;
+    const yField =
+      this.resolveFieldName(layer, this.state.selectedYMetric) ||
+      this.state.selectedYMetric;
+    const fermerField =
+      this.resolveFieldName(layer, "fermer_nom") ||
+      this.resolveFieldName(layer, "fermer") ||
+      null;
+    const ekinField =
+      this.resolveFieldName(layer, "ekin_turi") ||
+      this.resolveFieldName(layer, "ekin_turi_nomi") ||
+      this.resolveFieldName(layer, "crop_type") ||
+      null;
+    const maydonField =
+      this.resolveFieldName(layer, "maydon") ||
+      this.resolveFieldName(layer, "maydon_ga") ||
+      this.resolveFieldName(layer, "area") ||
+      this.resolveFieldName(layer, "area_ga") ||
+      null;
+
+    return (features || []).map((feature) => {
+      const attrs = (feature as any)?.attributes || {};
+      const rawId = String(attrs[idField] ?? "").trim();
+      return {
+        ...attrs,
+        name: rawId,
+        globalid: rawId,
+        x: Number(attrs[xField] ?? 0),
+        y: Number(attrs[yField] ?? 0),
+        fermer_nom: fermerField ? attrs[fermerField] : attrs.fermer_nom,
+        ekin_turi: ekinField ? attrs[ekinField] : attrs.ekin_turi,
+        maydon: maydonField ? attrs[maydonField] : attrs.maydon,
+      } as RawPoint;
+    });
+  };
+
   private buildApiParams = (): string => {
     const params = new URLSearchParams();
 
     if (this.state.selectedYil?.trim())
       params.set("yil", this.state.selectedYil.trim());
     if (this.state.selectedViloyat?.trim())
-      params.set("viloyat", this.state.selectedViloyat.trim());
+      params.set(
+        "viloyat",
+        this.resolveViloyatForApi(this.state.selectedViloyat.trim()),
+      );
     if (this.state.selectedTuman?.trim())
       params.set("tuman", this.state.selectedTuman.trim());
     if (this.state.selectedEkin_turi?.trim())
@@ -2537,7 +3271,10 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     if (this.state.selectedYil?.trim())
       params.set("yil", this.state.selectedYil.trim());
     if (this.state.selectedViloyat?.trim())
-      params.set("viloyat", this.state.selectedViloyat.trim());
+      params.set(
+        "viloyat",
+        this.resolveViloyatForApi(this.state.selectedViloyat.trim()),
+      );
     if (this.state.selectedTuman?.trim())
       params.set("tuman", this.state.selectedTuman.trim());
     if (this.state.selectedEkin_turi?.trim())
@@ -2874,6 +3611,13 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       layer.definitionExpression = "1=0";
     }
 
+    try {
+      const gl = view?.map?.findLayerById(
+        SELECTION_LAYER_ID,
+      ) as __esri.GraphicsLayer;
+      if (gl) gl.removeAll();
+    } catch {}
+
     // Zoom out
     if (view) {
       try {
@@ -2884,8 +3628,11 @@ export default class YieldWaterChartWidget extends React.PureComponent<
             this.resolveFieldName(layer, "viloyat_nom") ||
             this.resolveFieldName(layer, "region") ||
             "viloyat";
-          const escapedViloyat = this.state.selectedViloyat.replace(/'/g, "''");
-          const where = `${viloyatField} = '${escapedViloyat}'`;
+          const where = this.buildExactTextWhere(
+            viloyatField,
+            this.state.selectedViloyat,
+            "region",
+          );
           // Temporarily allow query for extent
           layer.definitionExpression = where;
           const extent = await layer.queryExtent({ where } as any);
@@ -2930,6 +3677,12 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       await layer.load();
     } catch {}
 
+    try {
+      (layer as any).minScale = 0;
+      (layer as any).maxScale = 0;
+      (layer as any).opacity = 0.9;
+    } catch {}
+
     // Build WHERE clause with all active filters
     const whereParts: string[] = [];
     const groupBy = this.state.selectedGroupBy;
@@ -2941,16 +3694,14 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         this.resolveFieldName(layer, "tuman_nom") ||
         this.resolveFieldName(layer, "district") ||
         "tuman";
-      const escapedName = itemName.replace(/'/g, "''");
-      whereParts.push(`${tumanField} = '${escapedName}'`);
+      whereParts.push(this.buildExactTextWhere(tumanField, itemName));
     } else if (groupBy === "ekin_turi") {
       const ekinField =
         this.resolveFieldName(layer, "ekin_turi") ||
         this.resolveFieldName(layer, "ekin_nomi") ||
         this.resolveFieldName(layer, "crop_type") ||
         "ekin_turi";
-      const escapedName = itemName.replace(/'/g, "''");
-      whereParts.push(`${ekinField} = '${escapedName}'`);
+      whereParts.push(this.buildExactTextWhere(ekinField, itemName));
     }
 
     // 2. Add filter dropdown selections (if any)
@@ -2960,8 +3711,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         this.resolveFieldName(layer, "tuman_nom") ||
         this.resolveFieldName(layer, "district") ||
         "tuman";
-      const escapedTuman = this.state.selectedTuman.replace(/'/g, "''");
-      whereParts.push(`${tumanField} = '${escapedTuman}'`);
+      whereParts.push(
+        this.buildExactTextWhere(tumanField, this.state.selectedTuman),
+      );
     }
 
     if (groupBy === "tuman" && this.state.selectedEkin_turi) {
@@ -2970,8 +3722,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         this.resolveFieldName(layer, "ekin_nomi") ||
         this.resolveFieldName(layer, "crop_type") ||
         "ekin_turi";
-      const escapedEkin = this.state.selectedEkin_turi.replace(/'/g, "''");
-      whereParts.push(`${ekinField} = '${escapedEkin}'`);
+      whereParts.push(
+        this.buildExactTextWhere(ekinField, this.state.selectedEkin_turi),
+      );
     }
 
     // 3. Add viloyat filter if selected
@@ -2981,8 +3734,13 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         this.resolveFieldName(layer, "viloyat_nom") ||
         this.resolveFieldName(layer, "region") ||
         "viloyat";
-      const escapedViloyat = this.state.selectedViloyat.replace(/'/g, "''");
-      whereParts.push(`${viloyatField} = '${escapedViloyat}'`);
+      whereParts.push(
+        this.buildExactTextWhere(
+          viloyatField,
+          this.state.selectedViloyat,
+          "region",
+        ),
+      );
     }
 
     // 4. Add mavsum filter if selected
@@ -2991,8 +3749,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         this.resolveFieldName(layer, "mavsum") ||
         this.resolveFieldName(layer, "season") ||
         "mavsum";
-      const escapedMavsum = this.state.selectedMavsum.replace(/'/g, "''");
-      whereParts.push(`${mavsumField} = '${escapedMavsum}'`);
+      whereParts.push(
+        this.buildExactTextWhere(mavsumField, this.state.selectedMavsum),
+      );
     }
 
     const where = whereParts.join(" AND ");
@@ -3014,7 +3773,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         .catch(() => null);
 
       countPromise
-        .then((matched) => {
+        .then(async (matched) => {
           if (!this._isMounted) return;
           if (matched === 0) {
             this.setState({
@@ -3022,9 +3781,16 @@ export default class YieldWaterChartWidget extends React.PureComponent<
               mapSelectedCount: 0,
             });
           } else {
+            try {
+              const gl = view?.map?.findLayerById(
+                SELECTION_LAYER_ID,
+              ) as __esri.GraphicsLayer;
+              if (gl) gl.removeAll();
+            } catch {}
             this.setState({
               mapSelectedCount: matched || 0,
               mapError: null,
+              activePolygonLayerId: layer.id,
             });
           }
         })
@@ -3070,7 +3836,15 @@ export default class YieldWaterChartWidget extends React.PureComponent<
   /** ✅ API returns GlobalID sometimes as `globalid`, but in your case it's inside `name` (see screenshot). */
   private getRawPointGlobalId = (p: RawPoint | null | undefined): string => {
     const raw =
-      (p as any)?.globalid ?? (p as any)?.GlobalID ?? (p as any)?.name ?? "";
+      (p as any)?.globalid ??
+      (p as any)?.GlobalID ??
+      (p as any)?.gid ??
+      (p as any)?.idd ??
+      (p as any)?.id ??
+      (p as any)?.objectid ??
+      (p as any)?.OBJECTID ??
+      (p as any)?.name ??
+      "";
     return String(raw || "").trim();
   };
 
@@ -3274,20 +4048,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
   ): string[] => {
     if (!poly || poly.length < 3) return [];
 
-    // ✅ Debug: Log coordinate systems
-    console.log("[computeSelectedBins] Lasso polygon bounds:", {
-      minX: Math.min(...poly.map((p) => p.x)),
-      maxX: Math.max(...poly.map((p) => p.x)),
-      minY: Math.min(...poly.map((p) => p.y)),
-      maxY: Math.max(...poly.map((p) => p.y)),
-      pointCount: poly.length,
-    });
-
-    console.log(
-      "[computeSelectedBins] Cached bin coords count:",
-      this._binPixelCoords.size,
-    );
-
     // ✅ If no cached coords yet, fall back to calculated coords
     const useCached = this._binPixelCoords.size > 0;
 
@@ -3312,8 +4072,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         keys.push(key);
       }
     }
-
-    console.log("[computeSelectedBins] Found", keys.length, "selected bins");
 
     return keys;
   };
@@ -3381,6 +4139,93 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     view.map.add(gl);
     return gl;
+  };
+
+  private renderSelectionOverlay = async (
+    layer: FeatureLayer,
+    where: string,
+    matched: number,
+  ): Promise<void> => {
+    const gl = this.ensureSelectionLayer();
+    if (!gl) return;
+
+    try {
+      gl.removeAll();
+    } catch {}
+
+    const objectIdField =
+      String((layer as any)?.objectIdField || "").trim() || "objectid";
+
+    let objectIds: number[] = [];
+    try {
+      objectIds = await this.withDefinitionExpressionDisabled(
+        layer,
+        async () => {
+          const ids = await layer.queryObjectIds({ where } as any);
+          return Array.isArray(ids) ? ids : [];
+        },
+      );
+    } catch {
+      objectIds = [];
+    }
+
+    if (!objectIds.length) return;
+
+    const maxOverlayFeatures =
+      matched > 20000
+        ? 3500
+        : matched > 5000
+          ? 2500
+          : matched > 1500
+            ? 1500
+            : Math.max(500, matched);
+    const sampleIds = objectIds.slice(0, maxOverlayFeatures);
+    const chunks = this.chunkArray(sampleIds, 200);
+
+    for (const chunk of chunks) {
+      try {
+        const fs = await this.withDefinitionExpressionDisabled(
+          layer,
+          async () => {
+            return await layer.queryFeatures({
+              objectIds: chunk,
+              outFields: ["*"],
+              returnGeometry: true,
+            } as any);
+          },
+        );
+
+        const features = ((fs as any)?.features || []) as __esri.Graphic[];
+        for (const feature of features) {
+          const geometry = (feature as any)?.geometry as __esri.Geometry;
+          if (!geometry) continue;
+
+          if ((geometry as any)?.type === "polygon") {
+            const symbol = this.buildOverlaySymbolFromLayer(
+              layer,
+              feature,
+              matched,
+            );
+            gl.add(
+              new Graphic({
+                geometry,
+                symbol,
+              }),
+            );
+          }
+        }
+      } catch {
+        // keep whatever overlay graphics we already managed to draw
+      }
+    }
+
+    try {
+      const jmv = this.state.jimuMapView;
+      const view = jmv?.view as __esri.MapView | __esri.SceneView | undefined;
+      if (view?.map) {
+        view.map.reorder(gl, view.map.layers.length - 1);
+      }
+    } catch {}
   };
 
   /** ✅ Our own polygon layer id (stable, per year/url) */
@@ -3459,28 +4304,95 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     }
   };
 
-  /** ✅ Clear selection and zoom out to saved/default extent */
-  private clearMapSelectionAndZoomOut = async (): Promise<void> => {
-    this.clearMapSelection();
+  private buildOverlaySymbolFromLayer = (
+    layer: FeatureLayer,
+    feature: __esri.Graphic,
+    matched: number,
+  ): any => {
+    const fallback = {
+      type: "simple-fill",
+      color: matched > 5000 ? [255, 166, 0, 0.42] : [255, 170, 0, 0.3],
+      outline: {
+        color: [0, 0, 0, 0],
+        width: 0,
+      },
+    } as any;
 
+    try {
+      const renderer = (layer as any)?.renderer;
+      const rendered = renderer?.getSymbol
+        ? renderer.getSymbol(feature)
+        : renderer?.symbol;
+      const symbol = rendered?.clone ? rendered.clone() : rendered;
+      if (!symbol) return fallback;
+
+      if (symbol?.type === "simple-fill") {
+        symbol.outline = {
+          ...(symbol.outline || {}),
+          color: [0, 0, 0, 0],
+          width: 0,
+        };
+      }
+
+      return symbol;
+    } catch {
+      return fallback;
+    }
+  };
+
+  /** ✅ Clear selection and zoom out to viloyat/region extent */
+  /** ✅ Clear row focus and zoom to viloyat level */
+  private clearMapSelectionAndZoomOut = async (): Promise<void> => {
     try {
       const jmv = this.state.jimuMapView;
       const view = jmv?.view as __esri.MapView | __esri.SceneView | undefined;
       if (!view) return;
 
-      // Zoom back to saved extent (before first bin click)
-      if ((view as any).goTo) {
-        try {
-          const savedExtent = this.state.savedMapExtent;
-          if (savedExtent) {
-            // Restore original extent
-            await (view as any).goTo(savedExtent, { duration: 500 });
-            this.setState({ savedMapExtent: null });
+      // Restore the bin selection (show all fields from the selected bin again)
+      const { rawPoints, selectedYil, selectedViloyat } = this.state;
+      if (rawPoints && rawPoints.length > 0) {
+        // Re-apply the bin selection from rawPoints
+        const globalids = rawPoints
+          .map((p) => this.getRawPointGlobalId(p))
+          .filter(Boolean);
+
+        if (globalids.length > 0) {
+          await this.applySelectionToMap(globalids, selectedYil);
+
+          // Zoom to viloyat extent (region level)
+          if ((view as any).goTo && selectedViloyat) {
+            try {
+              const year = selectedYil;
+              const layer = await this.ensurePolygonLayerInMapAfterLasso(year);
+              if (layer) {
+                const viloyatField =
+                  this.resolveFieldName(layer, "viloyat") ||
+                  this.resolveFieldName(layer, "viloyat_nom") ||
+                  this.resolveFieldName(layer, "region") ||
+                  "viloyat";
+                const where = this.buildExactTextWhere(
+                  viloyatField,
+                  selectedViloyat,
+                  "region",
+                );
+                const extent = await (layer as any).queryExtent({ where });
+                if (extent?.extent) {
+                  await (view as any).goTo(extent.extent.expand(1.1), {
+                    duration: 500,
+                  });
+                }
+              }
+            } catch (zoomErr) {
+              console.warn(
+                "[clearMapSelectionAndZoomOut] zoom to viloyat failed:",
+                zoomErr,
+              );
+            }
           }
-        } catch (zoomErr) {
-          console.warn("[clearMapSelectionAndZoomOut] zoom failed:", zoomErr);
         }
       }
+
+      this.setState({ savedMapExtent: null });
     } catch (e) {
       console.warn("[clearMapSelectionAndZoomOut] error:", e);
     }
@@ -3557,6 +4469,11 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     const layer = await this.ensurePolygonLayerInMapAfterLasso(y);
     if (!layer) {
+      console.warn("[applySelectionToMap] No polygon layer found/created", {
+        year: y,
+        viloyat: this.state.selectedViloyat,
+        useDsSources: this.toPlainArray(this.props.useDataSources)?.length ?? 0,
+      });
       this.setState({
         mapError:
           "Could not create/find the polygon FeatureLayer for the selected year. " +
@@ -3570,13 +4487,14 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       await layer.load();
     } catch {}
 
-    // Resolve correct field name
-    const configuredIdField = this.getGlobalIdField();
-    const idField =
-      this.resolveFieldName(layer, configuredIdField) ||
-      this.resolveFieldName(layer, "globalid") ||
-      this.resolveFieldName(layer, "GlobalID") ||
-      "globalid";
+    console.log("[applySelectionToMap] Layer resolved:", {
+      url: (layer as any)?.url,
+      id: layer.id,
+      fields: layer.fields?.map((f) => f.name)?.slice(0, 15),
+      geometryType: (layer as any)?.geometryType,
+      idsCount: globalids?.length,
+      viloyat: this.state.selectedViloyat,
+    });
 
     // IMPORTANT: your layer stores strings like "{GUID}" (see screenshot),
     // so we must match BOTH formats regardless of field type.
@@ -3593,10 +4511,27 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       return;
     }
 
-    const values = [...new Set(coreIds.flatMap((g) => this.guidVariants(g)))]; // => [guid, {guid}]
-    const where = this.buildWhereForIds(idField, values, 200);
+    const idFieldRaw = await this.resolveBestIdFieldForSourceIds(
+      layer,
+      coreIds,
+    );
+    const idField =
+      this.resolveFieldName(layer, idFieldRaw) ||
+      this.resolveFieldName(layer, "globalid") ||
+      idFieldRaw;
 
-    // Clear selection graphics (you said you don't want highlight graphics)
+    const values = [...new Set(coreIds.flatMap((g) => this.guidVariants(g)))]; // => [guid, {guid}]
+    const idWhere = this.buildWhereForIds(idField, values, 200);
+    const contextWhere = this.buildContextFilterWhere(layer);
+    const whereWithCtx = this.combineWhereClauses(idWhere, contextWhere);
+    const candidates = this.getIdFieldCandidates(layer);
+    console.log(
+      `[applySelectionToMap] idField=${idField} globalIdField=${(layer as any)?.globalIdField ?? "null"} ` +
+        `layerFields=${layer.fields?.map((f) => f.name).join(",") || "(none)"} ` +
+        `candidates=${candidates.slice(0, 6).join(",")} sampleId=${coreIds[0] ?? "n/a"}`,
+    );
+
+    // Clear selection graphics
     try {
       const gl = view.map.findLayerById(
         SELECTION_LAYER_ID,
@@ -3604,10 +4539,83 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       if (gl) gl.removeAll();
     } catch {}
 
-    // Apply filter + show
+    let matched = 0;
+    let where = whereWithCtx;
     try {
+      // IMPORTANT: Use withDefinitionExpressionDisabled — newly-created layers
+      // start with definitionExpression="1=0" which would block all queries.
+      matched = await this.withDefinitionExpressionDisabled(layer, async () =>
+        Number((await layer.queryFeatureCount({ where } as any)) ?? 0),
+      );
+      console.log("[applySelectionToMap] Query result:", {
+        where: where.length > 300 ? where.slice(0, 300) + "..." : where,
+        idField,
+        matched,
+        sampleIds: coreIds.slice(0, 3),
+        contextWhere: contextWhere || "(none)",
+        layerDefExpr: (layer as any)?.definitionExpression ?? "(none)",
+        globalIdField: (layer as any)?.globalIdField ?? "(none)",
+      });
+      console.log(
+        `[applySelectionToMap] matched=${matched} idField=${idField} contextWhere=${contextWhere ? contextWhere.slice(0, 60) + "..." : "(none)"}`,
+      );
+
+      // If context filter gives 0, retry with ID-only WHERE
+      if (matched <= 0 && contextWhere) {
+        const idOnlyCount = await this.withDefinitionExpressionDisabled(
+          layer,
+          async () =>
+            Number(
+              (await layer.queryFeatureCount({ where: idWhere } as any)) ?? 0,
+            ),
+        );
+        console.log(
+          `[applySelectionToMap] Retry idOnly: idOnlyCount=${idOnlyCount} field=${idField} sampleWhere=${idWhere.slice(0, 80)}`,
+        );
+        if (idOnlyCount > 0) {
+          matched = idOnlyCount;
+          where = idWhere;
+        }
+      }
+
+      if (matched <= 0) {
+        const binRangeWhere = this.buildSelectedBinMetricWhere(layer);
+        if (binRangeWhere) {
+          const rangeCount = await this.withDefinitionExpressionDisabled(
+            layer,
+            async () =>
+              Number(
+                (await layer.queryFeatureCount({
+                  where: binRangeWhere,
+                } as any)) ?? 0,
+              ),
+          );
+          console.log(
+            `[applySelectionToMap] Retry binRange: rangeCount=${rangeCount} sampleWhere=${binRangeWhere.slice(0, 120)}`,
+          );
+          if (rangeCount > 0) {
+            matched = rangeCount;
+            where = binRangeWhere;
+          }
+        }
+      }
+
+      if (matched <= 0) {
+        layer.definitionExpression = "1=0";
+        layer.visible = false;
+        this.setState({
+          activePolygonLayerId: layer.id,
+          mapError: "Tanlangan bin uchun polygon topilmadi. ID mos kelmadi.",
+          mapSelectedCount: 0,
+        });
+        return;
+      }
+
       layer.definitionExpression = where;
       layer.visible = true;
+
+      await this.renderSelectionOverlay(layer, where, matched);
+
       // Save active layer ID so we can hide it later
       this.setState({ activePolygonLayerId: layer.id, mapError: null });
     } catch (e: any) {
@@ -3618,79 +4626,33 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       return;
     }
 
-    // ✅ Verify it actually matched something (prevents “Map visible: 62” lying)
-    // ✅ ASYNC - count and zoom in background (fire-and-forget, non-blocking)
-    const countPromise = layer
-      .queryFeatureCount({ where } as any)
-      .catch(() => null);
-    const extentPromise = (layer as any)
-      .queryExtent({ where })
-      .catch(() => null);
+    if (!this._isMounted) return;
+    this.setState({ mapSelectedCount: matched, mapError: null });
 
-    countPromise
-      .then((matched) => {
-        if (!this._isMounted) return;
-        if (matched === 0) {
-          this.setState({
-            mapError: `0 polygons matched. Check field "${idField}" values format (expected {GUID}).`,
-            mapSelectedCount: 0,
-          });
-        } else {
-          this.setState({
-            mapSelectedCount: matched || coreIds.length,
-            mapError: null,
-          });
-        }
-      })
-      .catch(() => {
-        if (this._isMounted)
-          this.setState({ mapSelectedCount: coreIds.length });
-      });
-
-    extentPromise
-      .then((ext) => {
-        if (!this._isMounted) return;
-        const extent = ext?.extent;
-        if (extent && (view as any).goTo) {
-          (view as any)
-            .goTo(extent.expand ? extent.expand(1.3) : extent, {
-              duration: 300,
-            })
-            .catch(() => {});
-        }
-      })
-      .catch(() => {});
+    try {
+      const ext = await (layer as any).queryExtent({ where });
+      const extent = ext?.extent;
+      if (extent && (view as any).goTo) {
+        await (view as any).goTo(extent.expand ? extent.expand(1.3) : extent, {
+          duration: 300,
+        });
+      }
+    } catch {
+      // Keep polygons visible even if zoom fails.
+    }
   };
 
   /** ✅ Handle single bin click - select bin and fetch raw points */
   private handleBinClick = async (payload: ScatterPoint): Promise<void> => {
-    console.log("[handleBinClick] Called with payload:", payload);
-
-    if (!payload) {
-      console.log("[handleBinClick] No payload, returning");
-      return;
-    }
+    if (!payload) return;
 
     const key = this.binKey(payload);
-    console.log("[handleBinClick] Generated key:", key);
-
-    if (!key) {
-      console.log("[handleBinClick] No key generated, returning");
-      return;
-    }
+    if (!key) return;
 
     const count = Number(payload.count ?? 0);
-    console.log(
-      `[handleBinClick] key=${key}, count=${count}, x=${payload.x_value}, y=${payload.y_value}`,
-    );
 
     // Agar bin bo'sh bo'lsa, hech narsa qilmaslik
-    if (count <= 0) {
-      console.log("[handleBinClick] Bin is empty (count <= 0), skipping");
-      return;
-    }
-
-    console.log("[handleBinClick] Proceeding with bin selection...");
+    if (count <= 0) return;
 
     // Toggle selection: if already selected, deselect; otherwise select only this bin
     const isCurrentlySelected = this.state.selectedBinKeys.includes(key);
@@ -3727,12 +4689,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
             ? currentExtent.clone()
             : { ...currentExtent };
           this.setState({ savedMapExtent: clonedExtent });
-          console.log(
-            "[handleBinClick] Saved current extent for later restore",
-          );
         }
       } catch (e) {
-        console.warn("[handleBinClick] Failed to save extent:", e);
+        // Keep selection flow working even if extent snapshot fails.
       }
     }
 
@@ -3751,11 +4710,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
   private fetchRawPointsForSelectedBins = async (): Promise<void> => {
     if (!this._isMounted) return;
-
-    console.log(
-      "[fetchRawPointsForSelectedBins] Starting, selectedBinKeys:",
-      this.state.selectedBinKeys,
-    );
 
     const xr = this.state.xRange;
     const yr = this.state.yRange;
@@ -3792,10 +4746,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     const xBinSize = (xr.max - xr.min) / GRID_BINS;
     const yBinSize = (yr.max - yr.min) / GRID_BINS;
 
-    console.log("[fetchRawPoints] bins:", bins);
-    console.log("[fetchRawPoints] xBinSize:", xBinSize, "yBinSize:", yBinSize);
-    console.log("[fetchRawPoints] xRange:", xr, "yRange:", yr);
-
     const body: RawBinsRequest = {
       bins,
       x_bin_size: xBinSize,
@@ -3803,9 +4753,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       x_axis: this.state.selectedXMetric,
       y_axis: this.state.selectedYMetric,
     };
-
-    console.log("[fetchRawPoints] request body:", JSON.stringify(body));
-
     const qp = this.buildFilterQueryOnly();
     const qs = qp ? `?${qp}` : "";
 
@@ -3815,8 +4762,8 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       rawPoints: [],
     });
 
-    // ✅ API endpoint - /analytics/xy-chart-bins (raw emas, POST bilan ishlaydi)
-    const url = `${API_BASE_URL}/analytics/xy-chart-bins${qs}`;
+    // ✅ API endpoint - /analytics/xy-chart-bins (POST)
+    const url = `${API_BASE_URL}${API_ENDPOINTS.chartBins}${qs}`;
 
     try {
       const res = await fetch(url, {
@@ -3843,27 +4790,21 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       const json = (await res.json()) as RawPointsResponse;
       const data = Array.isArray(json?.data) ? json.data : [];
 
-      console.log("[fetchRawPoints] API response data count:", data.length);
-      console.log("[fetchRawPoints] First 3 items:", data.slice(0, 3));
-      if (data.length > 0) {
-        console.log("[fetchRawPoints] First item keys:", Object.keys(data[0]));
-        console.log(
-          "[fetchRawPoints] First item full:",
-          JSON.stringify(data[0], null, 2),
-        );
-      }
-
       if (!this._isMounted) return;
 
-      // ✅ IMPORTANT FIX:
-      // Your API returns the GlobalID in `name` (screenshot), so we must use `globalid ?? name`.
+      // API returns the GlobalID in `name` field (per Swagger: XYDataPoint = {name, x, y})
       const ids = data.map((d) => this.getRawPointGlobalId(d)).filter(Boolean);
 
-      console.log("[fetchRawPoints] Extracted IDs count:", ids.length);
-      console.log("[fetchRawPoints] First 3 IDs:", ids.slice(0, 3));
+      console.log("[fetchRawPointsForSelectedBins] Bins API result:", {
+        url,
+        totalPoints: data.length,
+        idsExtracted: ids.length,
+        sampleData: data.slice(0, 2),
+        sampleIds: ids.slice(0, 5),
+        viloyat: this.state.selectedViloyat,
+      });
 
       if (ids.length === 0) {
-        console.warn("[fetchRawPoints] No polygon IDs found in API response!");
         this.setState({
           rawPoints: data,
           rawPointsLoading: false,
@@ -3885,11 +4826,20 @@ export default class YieldWaterChartWidget extends React.PureComponent<
           this.state.selectedYil,
         );
         if (layer && ids.length > 0) {
+          const idFieldRaw = await this.resolveBestIdFieldForSourceIds(
+            layer,
+            ids,
+          );
           const idField =
-            this.resolveFieldName(layer, this.getGlobalIdField()) ||
+            this.resolveFieldName(layer, idFieldRaw) ||
             this.resolveFieldName(layer, "globalid") ||
-            this.resolveFieldName(layer, "GlobalID") ||
-            "globalid";
+            idFieldRaw;
+          const xField =
+            this.resolveFieldName(layer, this.state.selectedXMetric) ||
+            this.state.selectedXMetric;
+          const yField =
+            this.resolveFieldName(layer, this.state.selectedYMetric) ||
+            this.state.selectedYMetric;
 
           // Try to resolve field names for fermer_nom, ekin_turi, maydon
           const fermerField =
@@ -3908,54 +4858,76 @@ export default class YieldWaterChartWidget extends React.PureComponent<
             this.resolveFieldName(layer, "area_ga") ||
             null;
 
-          const outFields = [idField];
-          if (fermerField) outFields.push(fermerField);
-          if (ekinTuriField) outFields.push(ekinTuriField);
-          if (maydonField) outFields.push(maydonField);
-
-          console.log("[fetchRawPoints] Enriching with FeatureLayer fields:", {
+          const candidateOutFields = [
             idField,
+            xField,
+            yField,
             fermerField,
             ekinTuriField,
             maydonField,
-            outFields,
-          });
+          ].filter(Boolean) as string[];
 
-          const features = await this.queryPolygonsByIdsChunked(
-            layer,
-            idField,
-            ids,
-            outFields,
+          const outFields = Array.from(
+            new Set(
+              candidateOutFields
+                .map((field) => this.resolveFieldName(layer, field) || "")
+                .filter(Boolean),
+            ),
           );
 
-          // Create a map of GlobalID -> attributes
-          const attrsMap = new Map<string, any>();
-          for (const feat of features) {
-            const gid = this.normalizeGuid(
-              String((feat as any)?.attributes?.[idField] ?? ""),
+          let features: __esri.Graphic[] = [];
+          try {
+            features = await this.queryPolygonsByIdsChunked(
+              layer,
+              idField,
+              ids,
+              outFields,
             );
-            if (gid) {
-              attrsMap.set(gid, (feat as any)?.attributes ?? {});
+          } catch (idQueryError: any) {
+            console.warn(
+              `[fetchRawPoints] ID enrichment query failed; fallbacking to bin range. idField=${idField} message=${idQueryError?.message ?? idQueryError}`,
+            );
+            features = [];
+          }
+
+          if (!features.length) {
+            features = await this.queryPolygonsBySelectedBinRanges(
+              layer,
+              outFields,
+            );
+            if (features.length) {
+              console.log(
+                `[fetchRawPoints] Fallbacked to bin-range layer query: features=${features.length}`,
+              );
+              enrichedData = this.mapFeaturesToRawPoints(layer, features);
             }
           }
 
-          // Enrich rawPoints with FeatureLayer attributes
-          enrichedData = data.map((point) => {
-            const gid = this.normalizeGuid(this.getRawPointGlobalId(point));
-            const attrs = attrsMap.get(gid) || {};
+          if (features.length && enrichedData === data) {
+            // Create a map of GlobalID -> attributes
+            const attrsMap = new Map<string, any>();
+            for (const feat of features) {
+              const gid = this.normalizeGuid(
+                String((feat as any)?.attributes?.[idField] ?? ""),
+              );
+              if (gid) {
+                attrsMap.set(gid, (feat as any)?.attributes ?? {});
+              }
+            }
 
-            return {
-              ...point,
-              fermer_nom: attrs[fermerField || ""] || undefined,
-              ekin_turi: attrs[ekinTuriField || ""] || undefined,
-              maydon: attrs[maydonField || ""] || undefined,
-            };
-          });
+            // Enrich rawPoints with FeatureLayer attributes
+            enrichedData = data.map((point) => {
+              const gid = this.normalizeGuid(this.getRawPointGlobalId(point));
+              const attrs = attrsMap.get(gid) || {};
 
-          console.log(
-            "[fetchRawPoints] Enriched data sample:",
-            enrichedData.slice(0, 2),
-          );
+              return {
+                ...point,
+                fermer_nom: attrs[fermerField || ""] || undefined,
+                ekin_turi: attrs[ekinTuriField || ""] || undefined,
+                maydon: attrs[maydonField || ""] || undefined,
+              };
+            });
+          }
         }
       } catch (enrichError: any) {
         console.warn(
@@ -3973,7 +4945,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         rawPointsError: null,
         rawPreviewOpen: false,
         viewMode: "chart",
-        mapSelectedCount: ids.length,
       });
     } catch (e: any) {
       if (!this._isMounted) return;
@@ -4027,16 +4998,30 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     outFields: string[],
   ): Promise<__esri.Graphic[]> => {
     try {
-      // ✅ To'g'ridan-to'g'ri where clause bilan query qilish (objectIds o'rniga)
-      // Bu infinite loop muammosini hal qiladi
-      const fs = await layer.queryFeatures({
-        where: where,
-        outFields: outFields,
-        returnGeometry: false, // ✅ Geometriya kerak emas, faqat attributes
-        num: 10000, // Maximum record count
-      } as any);
+      const objectIds = await this.withDefinitionExpressionDisabled(
+        layer,
+        async () => {
+          const ids = await layer.queryObjectIds({ where } as any);
+          return Array.isArray(ids) ? ids : [];
+        },
+      );
 
-      const feats = (fs?.features || []) as __esri.Graphic[];
+      if (!objectIds.length) return [];
+
+      const chunks = this.chunkArray(objectIds, 500);
+      const feats: __esri.Graphic[] = [];
+
+      await this.withDefinitionExpressionDisabled(layer, async () => {
+        for (const chunk of chunks) {
+          const fs = await layer.queryFeatures({
+            objectIds: chunk,
+            outFields,
+            returnGeometry: false,
+          } as any);
+          feats.push(...(((fs as any)?.features || []) as __esri.Graphic[]));
+        }
+      });
+
       console.log(
         `[queryFeaturesByWhereChunked] Returned ${
           feats.length
@@ -4784,13 +5769,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       y: weightedY / totalWeight,
     };
 
-    console.log(
-      "[calculateHeatmapCentroid] Weighted average:",
-      result,
-      "totalWeight:",
-      totalWeight,
-    );
-
     return result;
   };
 
@@ -4937,27 +5915,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     if (!rawPoints.length) return null;
 
-    // ✅ DEBUG: API'dan kelgan field nomlarini ko'rish
-    console.log(
-      "[renderSelectedList] rawPoints[0] keys:",
-      rawPoints[0] ? Object.keys(rawPoints[0]) : [],
-    );
-    console.log("[renderSelectedList] rawPoints[0] full object:", rawPoints[0]);
-    if (rawPoints[0]) {
-      console.log("[renderSelectedList] Sample point fields:", {
-        fermer_nom: rawPoints[0].fermer_nom,
-        fermer: rawPoints[0].fermer,
-        ekin_turi: rawPoints[0].ekin_turi,
-        ekin_turi_nomi: rawPoints[0].ekin_turi_nomi,
-        crop_type: rawPoints[0].crop_type,
-        maydon: rawPoints[0].maydon,
-        maydon_ga: rawPoints[0].maydon_ga,
-        area: rawPoints[0].area,
-        area_ga: rawPoints[0].area_ga,
-        allKeys: Object.keys(rawPoints[0]),
-      });
-    }
-
     // ✅ API x va y field'laridan foydalanish
     // x = X o'qi metrikasi (masalan: uwt_m3ha - suv istemoli)
     // y = Y o'qi metrikasi (masalan: yld_tot - hosildorlik)
@@ -4966,13 +5923,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     // ✅ Tartiblash uchun
     const { tableSortField, tableSortAsc } = this.state;
-
-    console.log(
-      "[renderSelectedList] tableSortField:",
-      tableSortField,
-      "tableSortAsc:",
-      tableSortAsc,
-    );
 
     // ✅ WP hisoblash funksiyasi
     const calcWP = (p: RawPoint): number => {
@@ -5095,22 +6045,21 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     // ✅ Jadval uchun row click handler
     const handleRowClick = async (point: RawPoint) => {
-      const gid = this.getRawPointGlobalId(point);
+      const gidRaw = this.getRawPointGlobalId(point);
+      const gid = this.normalizeGuid(gidRaw);
       if (!gid) return;
 
-      const isCurrentlyFocused = focusedGlobalId === gid;
+      const currentFocused = this.normalizeGuid(focusedGlobalId || "");
+      const isCurrentlyFocused = currentFocused === gid;
 
       if (isCurrentlyFocused) {
-        // Ikkinchi marta bosildi - barcha polygonlarga qaytish
+        // Ikkinchi marta bosildi: default holatga qaytish (zoom out + selection clear)
         this.setState({ focusedGlobalId: "" });
-        const allIds = rawPoints
-          .map((p) => this.getRawPointGlobalId(p))
-          .filter(Boolean);
-        await this.applySelectionToMap(allIds, this.state.selectedYil);
+        await this.clearMapSelectionAndZoomOut();
       } else {
-        // Birinchi marta bosildi - faqat shu polygonga zoom
+        // Birinchi marta bosildi: aynan shu maydonga zoom
         this.setState({ focusedGlobalId: gid });
-        await this.applySelectionToMap([gid], this.state.selectedYil);
+        await this.focusPolygonFromList(gid);
       }
     };
 
@@ -5626,8 +6575,11 @@ export default class YieldWaterChartWidget extends React.PureComponent<
               </thead>
               <tbody>
                 {displayPoints.map((point, idx) => {
-                  const gid = this.getRawPointGlobalId(point);
-                  const isFocused = focusedGlobalId === gid;
+                  const gid = this.normalizeGuid(
+                    this.getRawPointGlobalId(point),
+                  );
+                  const isFocused =
+                    this.normalizeGuid(focusedGlobalId || "") === gid;
                   // ✅ API dan kelgan real field nomlarini ishlatish
                   // Fermer nomi uchun: fermer_nom, fermer, name
                   const fermerName =
@@ -7168,6 +8120,11 @@ export default class YieldWaterChartWidget extends React.PureComponent<
                                     const isSelected =
                                       this.state.selectedGroupedItem ===
                                       item.name;
+                                    const localizedItemName =
+                                      this.getLocalizedGroupedItemLabel(
+                                        this.state.selectedGroupBy,
+                                        item.name || "",
+                                      ) || "-";
                                     const baseBackground = isSelected
                                       ? "rgba(52, 152, 219, 0.35)"
                                       : idx % 2 === 0
@@ -7212,8 +8169,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
                                             textOverflow: "ellipsis",
                                             fontWeight: isSelected ? 600 : 400,
                                           }}
+                                          title={localizedItemName}
                                         >
-                                          {item.name || "-"}
+                                          {localizedItemName}
                                         </td>
                                         <td
                                           style={{
