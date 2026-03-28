@@ -103,6 +103,15 @@ export default class EvapoIndicatorsV20 extends React.Component<
     Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
   private _lastMinMaxKey = "";
   private _pendingMinMaxClearTimer: any = null;
+  private _areaFetchInFlightKey = "";
+  private _lastAreaFetchKey = "";
+  private _lastAreaFetchAt = 0;
+  // Debounced fetch scheduler: coalesces rapid state changes into a single
+  // fetch cycle.  50 ms is enough to absorb the burst of events that
+  // LocalizationWidgetV20 emits on a viloyat change (clearCrop, clearWater,
+  // clearCanal, regionDependentFiltersReset, waterSupplyFilterChanged).
+  private _refreshTimer: any = null;
+  private _lastRefreshKey = "";
   private _jimuMapView: JimuMapView | null = null;
   private _containerRef = React.createRef<HTMLDivElement>();
   private _resizeObserver: ResizeObserver | null = null;
@@ -212,15 +221,16 @@ export default class EvapoIndicatorsV20 extends React.Component<
     // Setup water wave animation
     this.setupWaterWaves();
 
-    // Load initial count/area with defaults even if filter event was emitted before this widget mounted.
-    this.fetchCountData();
-    this.fetchAreaData();
+    // Schedule initial fetch — will be superseded if waterSupplyFilterChanged
+    // arrives within 50 ms (which it always does from LocalizationWidgetV20).
+    this.scheduleDataRefresh();
   }
 
   componentWillUnmount(): void {
     this._isMounted = false;
     this.removeEventListeners();
     if (this._countTimer) clearInterval(this._countTimer);
+    if (this._refreshTimer) clearTimeout(this._refreshTimer);
     if (this._pendingMinMaxClearTimer)
       clearTimeout(this._pendingMinMaxClearTimer);
     this._countAbortController?.abort();
@@ -237,8 +247,10 @@ export default class EvapoIndicatorsV20 extends React.Component<
   /* ─── RESIZE OBSERVER ─── */
   private setupResizeObserver(): void {
     if (!this._containerRef.current) {
-      // Retry after render
-      requestAnimationFrame(() => this.setupResizeObserver());
+      // Retry after render — but only if still mounted
+      if (this._isMounted) {
+        requestAnimationFrame(() => this.setupResizeObserver());
+      }
       return;
     }
     this._resizeObserver = new ResizeObserver((entries) => {
@@ -331,6 +343,19 @@ export default class EvapoIndicatorsV20 extends React.Component<
     );
     document.addEventListener("resetAllWidgets", this.onResetAll, true);
     document.addEventListener("masterStateUpdate", this.onMasterStateUpdate);
+    document.addEventListener(
+      "regionDependentFiltersReset",
+      this.onRegionDependentFiltersReset,
+    );
+    document.addEventListener("clearCropSelection", this.onClearCropSelection);
+    document.addEventListener(
+      "clearWaterSourceSelection",
+      this.onClearWaterSourceSelection,
+    );
+    document.addEventListener(
+      "clearCanalSelection",
+      this.onClearCanalSelection,
+    );
     // Don't listen to popstate - widget should not restore state from URL
     // window.addEventListener("popstate", this.onPopState);
   }
@@ -357,8 +382,83 @@ export default class EvapoIndicatorsV20 extends React.Component<
     );
     document.removeEventListener("resetAllWidgets", this.onResetAll, true);
     // document.removeEventListener("masterStateUpdate", this.onMasterStateUpdate);
+    document.removeEventListener(
+      "regionDependentFiltersReset",
+      this.onRegionDependentFiltersReset,
+    );
+    document.removeEventListener(
+      "clearCropSelection",
+      this.onClearCropSelection,
+    );
+    document.removeEventListener(
+      "clearWaterSourceSelection",
+      this.onClearWaterSourceSelection,
+    );
+    document.removeEventListener(
+      "clearCanalSelection",
+      this.onClearCanalSelection,
+    );
     window.removeEventListener("popstate", this.onPopState);
   }
+
+  /* ─── DEBOUNCED FETCH SCHEDULER ───
+   * Every event handler calls this instead of manually invoking
+   * fetchCountData / fetchAreaData / fetchYieldData / fetchEfficiencyData.
+   * It coalesces rapid-fire state changes (e.g. viloyat change triggers
+   * clearCrop → clearWater → clearCanal → regionReset → filterChanged
+   * in ≈5 ms) into ONE fetch cycle after a 50 ms quiet period.
+   * The refresh-key dedup ensures that if the effective API parameters
+   * haven't changed the fetch is skipped entirely.
+   */
+  private scheduleDataRefresh = (): void => {
+    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+    this._refreshTimer = setTimeout(() => {
+      this._refreshTimer = null;
+      if (!this._isMounted) return;
+
+      // Build a dedup key from the current state snapshot
+      const {
+        viloyat,
+        tuman,
+        mavsum,
+        mavsumForCountArea,
+        fermerNom,
+        cropType,
+        manbaNomi,
+        kanalNomi,
+        minMax,
+        minMaxMode,
+        yil,
+      } = this.state;
+      const key = JSON.stringify({
+        viloyat,
+        tuman,
+        mavsum,
+        mavsumForCountArea,
+        fermerNom,
+        cropType,
+        manbaNomi,
+        kanalNomi,
+        minMax,
+        minMaxMode,
+        yil,
+      });
+
+      // Skip if we already fetched for this exact state recently
+      if (key === this._lastRefreshKey) return;
+      this._lastRefreshKey = key;
+
+      this.fetchCountData();
+      this.fetchAreaData();
+      if (cropType) {
+        this.fetchYieldData();
+        this.fetchEfficiencyData();
+      } else {
+        // No crop → clear crop-dependent indicators
+        this.setState({ yieldData: null, efficiencyData: null });
+      }
+    }, 50);
+  };
 
   /* ─── EVENT HANDLERS ─── */
   private onLanguageChanged = (e: any): void => {
@@ -560,14 +660,7 @@ export default class EvapoIndicatorsV20 extends React.Component<
         d.fermer_nomNom ?? this.state.fermerNom,
       ).trim();
     if (d.yil !== undefined) newState.yil = this.normalizeYearValue(d.yil);
-    this.setState(newState as any, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (this.state.cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      }
-    });
+    this.setState(newState as any, () => this.scheduleDataRefresh());
   };
 
   private onCropSelected = (e: any): void => {
@@ -577,19 +670,7 @@ export default class EvapoIndicatorsV20 extends React.Component<
         e?.detail?.selectedCropType ||
         "",
     );
-    this.setState({ cropType }, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      } else {
-        this.setState({
-          yieldData: null,
-          efficiencyData: null,
-        });
-      }
-    });
+    this.setState({ cropType }, () => this.scheduleDataRefresh());
   };
 
   private onWaterSourceSelected = (e: any): void => {
@@ -600,14 +681,9 @@ export default class EvapoIndicatorsV20 extends React.Component<
       e?.detail?.waterSource ||
       "";
     // Clear stale canal when water source changes
-    this.setState({ manbaNomi, kanalNomi: "" }, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (this.state.cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      }
-    });
+    this.setState({ manbaNomi, kanalNomi: "" }, () =>
+      this.scheduleDataRefresh(),
+    );
   };
 
   private onCanalSelected = (e: any): void => {
@@ -617,14 +693,7 @@ export default class EvapoIndicatorsV20 extends React.Component<
       e?.detail?.canalName ||
       e?.detail?.canal ||
       "";
-    this.setState({ kanalNomi }, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (this.state.cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      }
-    });
+    this.setState({ kanalNomi }, () => this.scheduleDataRefresh());
   };
 
   private onMinMaxSelected = (e: any): void => {
@@ -640,14 +709,9 @@ export default class EvapoIndicatorsV20 extends React.Component<
       const minMaxKey = `${nextMode}:${nextMinMax}`;
       if (minMaxKey === this._lastMinMaxKey) return;
       this._lastMinMaxKey = minMaxKey;
-      this.setState({ minMax: nextMinMax, minMaxMode: nextMode }, () => {
-        this.fetchCountData();
-        this.fetchAreaData();
-        if (this.state.cropType) {
-          this.fetchYieldData();
-          this.fetchEfficiencyData();
-        }
-      });
+      this.setState({ minMax: nextMinMax, minMaxMode: nextMode }, () =>
+        this.scheduleDataRefresh(),
+      );
     };
 
     // Min -> Max transition can emit a brief intermediate "none" event.
@@ -673,28 +737,59 @@ export default class EvapoIndicatorsV20 extends React.Component<
     const yil = this.normalizeYearValue(
       e?.detail?.yil || e?.detail?.year || "",
     );
-    this.setState({ yil }, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (this.state.cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      }
-    });
+    this.setState({ yil }, () => this.scheduleDataRefresh());
   };
 
   private onConstructionYearChanged = (e: any): void => {
     const yil = this.normalizeYearValue(
       e?.detail?.constructionYear || e?.detail?.yil || "",
     );
-    this.setState({ yil }, () => {
-      this.fetchCountData();
-      this.fetchAreaData();
-      if (this.state.cropType) {
-        this.fetchYieldData();
-        this.fetchEfficiencyData();
-      }
+    this.setState({ yil }, () => this.scheduleDataRefresh());
+  };
+
+  private onRegionDependentFiltersReset = (e: any): void => {
+    const src = String(e?.detail?.source || "");
+    if (src !== "EvapoWidget" && src !== "LocalizationWidgetV20") return;
+    const reason = String(e?.detail?.reason || "");
+    if (
+      reason !== "viloyatChanged" &&
+      reason !== "tumanChanged" &&
+      reason !== "fermerChanged"
+    )
+      return;
+
+    // Clear dependent filters only — do NOT fetch here because
+    // waterSupplyFilterChanged always fires right after this event and
+    // its handler (onFilterChanged) will trigger the fetch with the
+    // updated viloyat/tuman/fermer.
+    this._lastMinMaxKey = "";
+    this.setState({
+      cropType: "",
+      manbaNomi: "",
+      kanalNomi: "",
+      minMax: "",
+      minMaxMode: "none" as const,
     });
+  };
+
+  private onClearCropSelection = (): void => {
+    if (this.state.cropType) {
+      this.setState({ cropType: "" }, () => this.scheduleDataRefresh());
+    }
+  };
+
+  private onClearWaterSourceSelection = (): void => {
+    if (this.state.manbaNomi) {
+      this.setState({ manbaNomi: "", kanalNomi: "" }, () =>
+        this.scheduleDataRefresh(),
+      );
+    }
+  };
+
+  private onClearCanalSelection = (): void => {
+    if (this.state.kanalNomi) {
+      this.setState({ kanalNomi: "" }, () => this.scheduleDataRefresh());
+    }
   };
 
   private onResetAll = (): void => {
@@ -722,14 +817,12 @@ export default class EvapoIndicatorsV20 extends React.Component<
       },
       () => {
         this._lastMinMaxKey = "";
+        this._lastRefreshKey = ""; // Force refresh after full reset
         if (this._pendingMinMaxClearTimer) {
           clearTimeout(this._pendingMinMaxClearTimer);
           this._pendingMinMaxClearTimer = null;
         }
-        setTimeout(() => {
-          this.fetchCountData();
-          this.fetchAreaData();
-        }, 100);
+        this.scheduleDataRefresh();
       },
     );
   };
@@ -762,14 +855,7 @@ export default class EvapoIndicatorsV20 extends React.Component<
         : "none";
     }
     if (Object.keys(newState).length > 0) {
-      this.setState(newState as any, () => {
-        this.fetchCountData();
-        this.fetchAreaData();
-        if (this.state.cropType) {
-          this.fetchYieldData();
-          this.fetchEfficiencyData();
-        }
-      });
+      this.setState(newState as any, () => this.scheduleDataRefresh());
     }
   };
 
@@ -807,21 +893,12 @@ export default class EvapoIndicatorsV20 extends React.Component<
           : "none";
       }
       if (Object.keys(newState).length > 0) {
-        this.setState(newState as any, () => {
-          this.fetchCountData();
-          this.fetchAreaData();
-          if (this.state.cropType) {
-            this.fetchYieldData();
-            this.fetchEfficiencyData();
-          }
-        });
+        this.setState(newState as any, () => this.scheduleDataRefresh());
       } else {
-        this.fetchCountData();
-        this.fetchAreaData();
+        this.scheduleDataRefresh();
       }
     } catch {
-      this.fetchCountData();
-      this.fetchAreaData();
+      this.scheduleDataRefresh();
     }
   }
 
@@ -829,12 +906,9 @@ export default class EvapoIndicatorsV20 extends React.Component<
   private onActiveViewChange = (jimuMapView: JimuMapView): void => {
     this._jimuMapView = jimuMapView;
     if (jimuMapView) {
-      this.setState({ connectionStatus: "connected" }, () => {
-        if (this.state.cropType) {
-          this.fetchYieldData();
-          this.fetchEfficiencyData();
-        }
-      });
+      this.setState({ connectionStatus: "connected" }, () =>
+        this.scheduleDataRefresh(),
+      );
     }
   };
 
@@ -1017,6 +1091,42 @@ export default class EvapoIndicatorsV20 extends React.Component<
       return;
     }
 
+    const areaRequestKey = JSON.stringify({
+      viloyat: viloyat || "",
+      tuman: tuman || "",
+      mavsum: mavsum || "",
+      mavsumForCountArea: mavsumForCountArea || "",
+      fermerNom: fermerNom || "",
+      cropType: cropType || "",
+      manbaNomi: manbaNomi || "",
+      kanalNomi: kanalNomi || "",
+      minMax: minMax || "",
+      minMaxMode,
+      yil: yilStr,
+    });
+
+    if (this._areaFetchInFlightKey === areaRequestKey) {
+      console.log(
+        "[EvapoIndicatorsV30] Skipping duplicate in-flight area fetch",
+      );
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      this._lastAreaFetchKey === areaRequestKey &&
+      now - this._lastAreaFetchAt < 300
+    ) {
+      console.log(
+        "[EvapoIndicatorsV30] Skipping throttled duplicate area fetch",
+      );
+      return;
+    }
+
+    this._areaFetchInFlightKey = areaRequestKey;
+    this._lastAreaFetchKey = areaRequestKey;
+    this._lastAreaFetchAt = now;
+
     console.log("[EvapoIndicatorsV30] Starting fetchAreaData:", {
       viloyat,
       tuman,
@@ -1184,6 +1294,10 @@ export default class EvapoIndicatorsV20 extends React.Component<
           areaLoading: false,
           areaError: err?.message || "Error",
         });
+      }
+    } finally {
+      if (this._areaFetchInFlightKey === areaRequestKey) {
+        this._areaFetchInFlightKey = "";
       }
     }
   }

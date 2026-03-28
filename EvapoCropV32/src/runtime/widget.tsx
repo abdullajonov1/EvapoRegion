@@ -10,6 +10,7 @@ import {
   getInitialTheme,
   LangCode,
   normalizeLang,
+  registerCropTranslations,
   t,
   translateCropName,
 } from "./messages";
@@ -120,11 +121,16 @@ export default class CropDistributionWidget extends React.PureComponent<
     string,
     Record<string, string>
   > = {};
+  private _cropTranslationReqId = 0;
 
   // Add abort controller for fetch operations
   private fetchAbortController: AbortController | null = null;
+  private canalValidationAbortController: AbortController | null = null;
   private externalRefreshTimer: number | null = null;
   private pendingMinMaxClearTimer: number | null = null;
+  private cropFetchInFlightKey = "";
+  private lastCropFetchKey = "";
+  private lastCropFetchAt = 0;
 
   // Connection constants
   MAX_CONNECTION_ATTEMPTS = 3;
@@ -685,8 +691,10 @@ export default class CropDistributionWidget extends React.PureComponent<
       return;
     }
 
-    if (selectedCrop && activeMapView && !this.state.isHandlingExternalEvent) {
-      this.zoomToSelectedCrop(selectedCrop);
+    if (selectedCrop) {
+      if (activeMapView && !this.state.isHandlingExternalEvent) {
+        this.zoomToSelectedCrop(selectedCrop);
+      }
     }
   };
 
@@ -902,6 +910,8 @@ export default class CropDistributionWidget extends React.PureComponent<
       "appLanguageChanged",
       this.handleLanguageChange as EventListener,
     );
+
+    void this.ensureCropTranslationCache(this.state.lang);
   }
 
   handleLanguageChange = (ev: Event) => {
@@ -916,6 +926,7 @@ export default class CropDistributionWidget extends React.PureComponent<
         // ignore storage errors
       }
       this.setState({ lang: incoming }, () => {
+        void this.ensureCropTranslationCache(incoming);
         this.forceUpdate();
       });
     }
@@ -962,7 +973,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   }
 
   private async fetchDirectoryList(
-    key: "Canal" | "Canals",
+    key: "Canal" | "Canals" | "Crop type",
     lang: "uz" | "kir" | "ru",
   ): Promise<string[]> {
     const typeCandidates = ["Evapo", "Evapo-RegionV20", "EvapoWaterCanalV20"];
@@ -996,6 +1007,26 @@ export default class CropDistributionWidget extends React.PureComponent<
       }
     }
     return [];
+  }
+
+  private async ensureCropTranslationCache(lang: LangCode): Promise<void> {
+    if (lang === "uz_lat") return;
+
+    const reqId = ++this._cropTranslationReqId;
+    try {
+      const [uzCrops, targetCrops] = await Promise.all([
+        this.fetchDirectoryList("Crop type", "uz"),
+        this.fetchDirectoryList("Crop type", this.getDirectoryLang(lang)),
+      ]);
+
+      if (reqId !== this._cropTranslationReqId) return;
+      if (!uzCrops.length || !targetCrops.length) return;
+
+      registerCropTranslations(lang, uzCrops, targetCrops);
+      if (this._isMounted) this.forceUpdate();
+    } catch {
+      // Static translations remain as fallback.
+    }
   }
 
   private async ensureCanalReverseTranslationCache(
@@ -1085,6 +1116,13 @@ export default class CropDistributionWidget extends React.PureComponent<
   ): Promise<string | null> {
     if (!selectedCrop || !canalName) return selectedCrop;
 
+    // Abort any previous canal validation that is still in-flight
+    if (this.canalValidationAbortController) {
+      this.canalValidationAbortController.abort();
+    }
+    this.canalValidationAbortController = new AbortController();
+    const signal = this.canalValidationAbortController.signal;
+
     try {
       const { viloyat, tuman, mavsum, fermer_nom, waterSource, minMax, yil } =
         this.state;
@@ -1096,7 +1134,9 @@ export default class CropDistributionWidget extends React.PureComponent<
       if (fermer_nom) queryParams.append("fermer_nom", fermer_nom);
       if (waterSource) queryParams.append("manba_nomi", waterSource);
       if (canalName) queryParams.append("kanal_nomi", canalName);
-      if (minMax) queryParams.append("min_max", minMax);
+      if (minMax && String(minMax).toLowerCase() !== "both") {
+        queryParams.append("min_max", minMax);
+      }
       if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
 
       const data = await this.fetchCropDistributionData(
@@ -1111,6 +1151,7 @@ export default class CropDistributionWidget extends React.PureComponent<
           minMax,
           yil,
         },
+        signal,
       );
       const crops = (data.crop_distribution || []).filter(
         (c) => c.area_ha > 0 && !!c.ekin_turi,
@@ -1119,7 +1160,11 @@ export default class CropDistributionWidget extends React.PureComponent<
       // Check if selectedCrop exists in available crops for this canal
       const cropExists = crops.some((c) => c.ekin_turi === selectedCrop);
       return cropExists ? selectedCrop : null;
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        console.log("[EvapoCropV32] Canal validation aborted (state changed)");
+        return selectedCrop; // Keep crop when aborted
+      }
       console.warn("[EvapoCropV32] Error validating crop for canal:", error);
       return selectedCrop; // On error, keep crop (don't clear)
     }
@@ -1304,14 +1349,35 @@ export default class CropDistributionWidget extends React.PureComponent<
     const currentCrop = this.state.selectedCrop;
 
     const incomingFermer = filters.fermer_nomNom ?? filters.fermer_nom ?? "";
+    const incomingWaterSource =
+      filters.manba_nomi ?? filters.sourceSelected ?? this.state.waterSource;
+    const incomingCanal =
+      filters.kanal_nomi ?? filters.canalName ?? this.state.canalName;
+    const incomingMinMax =
+      filters.min_max ?? filters.minMax ?? this.state.minMax ?? null;
 
-    // When viloyat, tuman OR fermer_nom changes, always clear the selected crop (prevents
-    // stale crop surviving a region/farmer switch regardless of setState batching).
+    // When key filters change, clear selected crop to avoid stale selection
+    // that may not exist for the new filter combination.
     const viloyatChanged = (filters.viloyat || "") !== this.state.viloyat;
     const tumanChanged = (filters.tuman || "") !== this.state.tuman;
     const fermerChanged = incomingFermer !== this.state.fermer_nom;
+    const waterSourceChanged =
+      String(incomingWaterSource || "") !==
+      String(this.state.waterSource || "");
+    const canalChanged =
+      String(incomingCanal || "") !== String(this.state.canalName || "");
+    const minMaxChanged =
+      String(incomingMinMax || "") !== String(this.state.minMax || "");
+
     const nextCrop =
-      viloyatChanged || tumanChanged || fermerChanged ? null : currentCrop;
+      viloyatChanged ||
+      tumanChanged ||
+      fermerChanged ||
+      waterSourceChanged ||
+      canalChanged ||
+      minMaxChanged
+        ? null
+        : currentCrop;
 
     if (this.state.connectionStatus !== "connected") {
       this.setState({
@@ -1320,20 +1386,33 @@ export default class CropDistributionWidget extends React.PureComponent<
         tuman: filters.tuman || "",
         mavsum: filters.mavsum || "",
         fermer_nom: incomingFermer,
+        waterSource: incomingWaterSource || "",
+        canalName: incomingCanal || "",
+        minMax: incomingMinMax,
         yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
         selectedCrop: nextCrop,
         activeSlice:
-          tumanChanged || fermerChanged ? null : this.state.activeSlice,
+          viloyatChanged ||
+          tumanChanged ||
+          fermerChanged ||
+          waterSourceChanged ||
+          canalChanged ||
+          minMaxChanged
+            ? null
+            : this.state.activeSlice,
       });
       return;
     }
 
     const otherFiltersChanged =
+      viloyatChanged ||
       tumanChanged ||
-      filters.viloyat !== this.state.viloyat ||
       filters.mavsum !== this.state.mavsum ||
       (this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR) !==
-        this.state.yil;
+        this.state.yil ||
+      waterSourceChanged ||
+      canalChanged ||
+      minMaxChanged;
 
     // Fermer-only changes still must refresh API data for correct crop totals.
     const shouldRefetch = fermerChanged || otherFiltersChanged;
@@ -1346,10 +1425,18 @@ export default class CropDistributionWidget extends React.PureComponent<
         tuman: filters.tuman || "",
         mavsum: filters.mavsum || "",
         fermer_nom: incomingFermer,
+        waterSource: incomingWaterSource || "",
+        canalName: incomingCanal || "",
+        minMax: incomingMinMax,
         yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
         selectedCrop: nextCrop,
         activeSlice:
-          viloyatChanged || tumanChanged || fermerChanged
+          viloyatChanged ||
+          tumanChanged ||
+          fermerChanged ||
+          waterSourceChanged ||
+          canalChanged ||
+          minMaxChanged
             ? null
             : this.state.activeSlice,
         isHandlingExternalEvent: true,
@@ -1469,6 +1556,10 @@ export default class CropDistributionWidget extends React.PureComponent<
     if (this.fetchAbortController) {
       this.fetchAbortController.abort();
       this.fetchAbortController = null;
+    }
+    if (this.canalValidationAbortController) {
+      this.canalValidationAbortController.abort();
+      this.canalValidationAbortController = null;
     }
     document.removeEventListener("yilChanged", this.handleYilEvent);
     document.removeEventListener(
@@ -1624,12 +1715,11 @@ export default class CropDistributionWidget extends React.PureComponent<
       this.normalizeYearValue(e?.detail?.yil ?? "") || DEFAULT_INITIAL_YEAR;
     if (!this._isMounted) return;
     if ((incoming || "") === (this.state.yil || "")) return;
-    const currentCrop = this.state.selectedCrop;
-
     this.setState(
-      { yil: incoming, selectedCrop: currentCrop, activeSlice: null },
+      { yil: incoming, selectedCrop: null, activeSlice: null },
       () => {
         this.fetchCropData();
+        this.notifyCropSelection();
         // crop filter is selection-based; no persistent def expr here
       },
     );
@@ -1642,12 +1732,11 @@ export default class CropDistributionWidget extends React.PureComponent<
       ) || DEFAULT_INITIAL_YEAR;
     if (!this._isMounted) return;
     if ((incoming || "") === (this.state.yil || "")) return;
-    const currentCrop = this.state.selectedCrop;
-
     this.setState(
-      { yil: incoming, selectedCrop: currentCrop, activeSlice: null },
+      { yil: incoming, selectedCrop: null, activeSlice: null },
       () => {
         this.fetchCropData();
+        this.notifyCropSelection();
       },
     );
   };
@@ -1665,6 +1754,12 @@ export default class CropDistributionWidget extends React.PureComponent<
         source === "CropDistributionWidget"
       ) {
         return;
+      }
+
+      // Abort any in-flight canal validation — the water source just changed
+      if (this.canalValidationAbortController) {
+        this.canalValidationAbortController.abort();
+        this.canalValidationAbortController = null;
       }
 
       if (this.state.connectionStatus !== "connected") {
@@ -1868,14 +1963,11 @@ export default class CropDistributionWidget extends React.PureComponent<
   fetchCropData = async (): Promise<void> => {
     if (this.state.connectionStatus !== "connected") return;
 
+    let requestKey = "";
+    let activeSignal: AbortSignal | null = null;
+
     try {
       this.clearExternalRefreshTimer(); // cancel any pending debounced fetch
-      if (this.fetchAbortController) this.fetchAbortController.abort();
-      this.fetchAbortController = new AbortController();
-      const signal = this.fetchAbortController.signal;
-
-      this.setState({ loading: true, error: null });
-
       const {
         viloyat,
         tuman,
@@ -1886,6 +1978,40 @@ export default class CropDistributionWidget extends React.PureComponent<
         minMax,
         yil,
       } = this.state;
+
+      requestKey = JSON.stringify({
+        viloyat: viloyat || "",
+        tuman: tuman || "",
+        mavsum: mavsum || "",
+        fermer_nom: fermer_nom || "",
+        waterSource: waterSource || "",
+        canalName: canalName || "",
+        minMax: minMax || "",
+        yil: yil || "",
+      });
+
+      if (this.cropFetchInFlightKey === requestKey) {
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        this.lastCropFetchKey === requestKey &&
+        now - this.lastCropFetchAt < 300
+      ) {
+        return;
+      }
+
+      this.cropFetchInFlightKey = requestKey;
+      this.lastCropFetchKey = requestKey;
+      this.lastCropFetchAt = now;
+
+      if (this.fetchAbortController) this.fetchAbortController.abort();
+      this.fetchAbortController = new AbortController();
+      const signal = this.fetchAbortController.signal;
+      activeSignal = signal;
+
+      this.setState({ loading: true, error: null });
 
       const resolvedCanalName = canalName
         ? await this.resolveRawCanalName(canalName)
@@ -1925,9 +2051,35 @@ export default class CropDistributionWidget extends React.PureComponent<
         );
         if (signal.aborted) return;
 
-        let crops = (data.crop_distribution || []).filter(
-          (c) => c.area_ha > 0 && !!c.ekin_turi,
+        const rawCrops = data.crop_distribution || [];
+
+        // Names that are not actual crop types — exclude from the card list.
+        const NON_CROP_NAMES = new Set(
+          [
+            "bo'z yer",
+            "bo`z yer",
+            "boz yer",
+            "bo'sh yer",
+            "bosh yer",
+            "bo\u2018z yer",
+            "bo\u02bbz yer",
+            "bo\u02bcz yer",
+          ].map((n) => n.toLowerCase()),
         );
+
+        let crops = rawCrops.filter((c) => {
+          if (!c.ekin_turi || c.area_ha <= 0) return false;
+          const lower = String(c.ekin_turi)
+            .toLowerCase()
+            .replace(/[`''\u02bb\u02bc\u02b9\u02bd\u00b4]/g, "'");
+          return !NON_CROP_NAMES.has(lower);
+        });
+        console.log(
+          `[EvapoCropV32] fetchCropData: API returned ${rawCrops.length} crops, ${crops.length} after filtering (non-crop names removed)`,
+        );
+
+        // Keep crop options sourced from endpoint response only.
+        // Do not prune by feature-layer presence to avoid hiding valid API crops.
 
         const totalArea = crops.reduce((s, c) => s + c.area_ha, 0);
         crops = crops.map((c) => ({
@@ -1979,8 +2131,22 @@ export default class CropDistributionWidget extends React.PureComponent<
         });
       }
     } finally {
-      this.fetchAbortController = null;
+      if (this.fetchAbortController?.signal === activeSignal) {
+        this.fetchAbortController = null;
+      }
+      if (this.cropFetchInFlightKey === requestKey) {
+        this.cropFetchInFlightKey = "";
+      }
     }
+  };
+
+  private isCorsLikeFetchError = (error: any): boolean => {
+    const msg = String(error?.message || "").toLowerCase();
+    return (
+      msg.includes("failed to fetch") ||
+      msg.includes("networkerror") ||
+      msg.includes("load failed")
+    );
   };
 
   private getCropDistributionApiCandidates = (
@@ -2043,6 +2209,164 @@ export default class CropDistributionWidget extends React.PureComponent<
       }
     }
     throw lastError || new Error("crop/water-distribution failed");
+  }
+
+  /**
+   * Query the feature layer for distinct ekin_turi values that exist under
+   * the current region/year filters. Returns a Set of normalised crop names.
+   * Used to cross-validate API crops against the actual map data so we never
+   * show a crop that has 0 features on the map.
+   */
+  private async getLayerCropNames(
+    signal?: AbortSignal,
+  ): Promise<Set<string> | null> {
+    const featureLayer = this.state.featureLayer as any;
+    if (!featureLayer?.createQuery || !featureLayer?.queryFeatures) return null;
+
+    const cropField = this.findLayerFieldName(["ekin_turi"]);
+    if (!cropField) return null;
+
+    const viloyatField = this.findLayerFieldName(["viloyat"]);
+    const yilField = this.findLayerFieldName(["yil"]);
+    const minMaxField = this.findLayerFieldName(["min_max"]);
+
+    const clauses: string[] = ["1=1"];
+    const { viloyat, yil } = this.state;
+    if (viloyatField && viloyat) {
+      const raw = String(viloyat).trim();
+      const withSuffix = /\sviloyati$/i.test(raw) ? raw : `${raw} viloyati`;
+      const withoutSuffix = raw.replace(/\sviloyati$/i, "").trim();
+      const candidates = Array.from(
+        new Set(
+          [
+            raw,
+            withSuffix,
+            withoutSuffix,
+            ...this.buildQuoteVariants(raw),
+            ...this.buildQuoteVariants(withSuffix),
+            ...this.buildQuoteVariants(withoutSuffix),
+          ].filter(Boolean),
+        ),
+      );
+      const vilWhere = candidates
+        .map((v) => `${viloyatField}='${this.escapeArcGIS(v)}'`)
+        .join(" OR ");
+      clauses.push(`(${vilWhere})`);
+    }
+    if (yilField && yil && /^\d{4}$/.test(yil)) {
+      clauses.push(
+        `(${yilField}=${Number(yil)} OR ${yilField}='${this.escapeArcGIS(yil)}')`,
+      );
+    }
+
+    // When min/max is active, restrict the distinct-crop query to only
+    // crops that have min_max polygon data on the map.  This prevents
+    // showing crops that exist in the "no-filter" API response but have
+    // zero features when the user clicks them with min/max enabled.
+    const { minMax } = this.state;
+    if (minMaxField && minMax) {
+      const mml = String(minMax).toLowerCase();
+      if (mml === "both") {
+        clauses.push(`(${minMaxField} IN ('Min','Max'))`);
+      } else if (mml === "min" || mml === "max") {
+        const val = mml === "min" ? "Min" : "Max";
+        clauses.push(`(${minMaxField}='${val}')`);
+      }
+    }
+
+    try {
+      const q = featureLayer.createQuery();
+      q.where = clauses.join(" AND ");
+      q.returnDistinctValues = true;
+      q.returnGeometry = false;
+      q.outFields = [cropField];
+      q.num = 200;
+
+      if (signal?.aborted) return null;
+      const res = await featureLayer.queryFeatures(q);
+      const features = Array.isArray(res?.features) ? res.features : [];
+
+      const names = new Set<string>();
+      for (const f of features) {
+        const name = String(f?.attributes?.[cropField] ?? "").trim();
+        if (name) names.add(name.toLowerCase());
+      }
+      console.log(
+        `[EvapoCropV32] Feature layer has ${names.size} distinct crops for current region/year`,
+        Array.from(names),
+      );
+      return names;
+    } catch (err) {
+      console.warn("[EvapoCropV32] Failed to query layer crop names:", err);
+      return null;
+    }
+  }
+
+  /**
+   * Known API→layer crop-name aliases.
+   * Keys are lowercased API names, values are arrays of layer equivalents.
+   */
+  private static readonly CROP_ALIAS_MAP: Record<string, string[]> = {
+    "qovun-tarvuz": ["qovun", "tarvuz", "qovun-tarvuz"],
+    "qovun tarvuz": ["qovun", "tarvuz", "qovun-tarvuz"],
+    "yeryong'oq": ["yer yong'oq", "yeryong'oq"],
+    "yeryong`oq": ["yer yong'oq", "yer yong`oq"],
+    "bo'z yer": ["bo'sh yer", "bo'z yer", "boz yer"],
+    "bo`z yer": ["bo'sh yer", "bo`z yer", "boz yer"],
+  };
+
+  /**
+   * Check if a crop name from the API matches any name in the feature layer.
+   * Handles apostrophe/backtick variants, compound names (e.g. Qovun-tarvuz),
+   * and spacing differences (e.g. Yeryong'oq → yer yong'oq).
+   */
+  private cropExistsInLayer(
+    apiCropName: string,
+    layerCropNames: Set<string>,
+  ): boolean {
+    // 1. Direct apostrophe-variant matching
+    const variants = this.buildQuoteVariants(apiCropName);
+    if (variants.some((v) => layerCropNames.has(v.toLowerCase()))) return true;
+
+    // 2. Check alias map (handles known mismatches like Qovun-tarvuz, Yeryong'oq, Bo'z yer)
+    const normalized = apiCropName.toLowerCase().replace(/[`''ʻʼʹʽ´]/g, "'");
+    for (const [key, aliases] of Object.entries(
+      CropDistributionWidget.CROP_ALIAS_MAP,
+    )) {
+      if (normalized === key) {
+        for (const alias of aliases) {
+          const aliasVariants = this.buildQuoteVariants(alias);
+          if (aliasVariants.some((v) => layerCropNames.has(v.toLowerCase())))
+            return true;
+        }
+      }
+    }
+
+    // 3. Compound name splitting: "Qovun-tarvuz" → check "qovun" and "tarvuz" separately
+    const parts = apiCropName
+      .split(/[-/]/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length > 1) {
+      if (
+        parts.some((part) => {
+          const partVariants = this.buildQuoteVariants(part);
+          return partVariants.some((v) => layerCropNames.has(v.toLowerCase()));
+        })
+      )
+        return true;
+    }
+
+    // 4. Space-collapsed matching: "Yeryong'oq" → try "yer yong'oq" by inserting spaces
+    //    before uppercase letters or known word boundaries
+    const spaceInserted = normalized.replace(/(yer)(yong)/i, "$1 $2");
+    if (spaceInserted !== normalized) {
+      const spaceVariants = this.buildQuoteVariants(spaceInserted);
+      if (spaceVariants.some((v) => layerCropNames.has(v.toLowerCase())))
+        return true;
+    }
+
+    return false;
   }
 
   private findLayerFieldName = (candidates: string[]): string | null => {
@@ -2281,6 +2605,12 @@ export default class CropDistributionWidget extends React.PureComponent<
         if (error?.name === "AbortError") throw error;
         lastError = error instanceof Error ? error : new Error(String(error));
         console.warn("[EvapoCropV32] API fetch error:", lastError.message, url);
+        if (this.isCorsLikeFetchError(lastError)) {
+          console.warn(
+            "[EvapoCropV32] CORS-like failure detected, skipping remaining crop/distribution endpoints",
+          );
+          break;
+        }
       }
     }
 
@@ -2626,13 +2956,48 @@ export default class CropDistributionWidget extends React.PureComponent<
 
   // Render card view with dynamic responsive sizing
   renderCardView = () => {
-    const { cropData, lang, currentPage } = this.state;
+    const {
+      cropData,
+      lang,
+      currentPage,
+      selectedCrop,
+      waterSource,
+      canalName,
+      minMax,
+    } = this.state;
     const { crops } = cropData;
 
-    const sortedCrops = [...crops].sort((a, b) => b.area_ha - a.area_ha);
+    // Crops are already cross-validated against the feature layer in fetchCropData.
+    const baseSorted = [...crops].sort((a, b) => b.area_ha - a.area_ha);
+
+    // When external filters (canal / water-source / min-max) are active and a crop
+    // is selected, pin that crop to position 0 so it is always visible at the left.
+    // When no external filters are active the crop stays in its natural sort position.
+    const hasExternalFilters = !!(waterSource || canalName || minMax);
+    let sortedCrops: typeof baseSorted;
+    if (hasExternalFilters && selectedCrop) {
+      const selIdx = baseSorted.findIndex((c) => c.ekin_turi === selectedCrop);
+      if (selIdx > 0) {
+        sortedCrops = [
+          baseSorted[selIdx],
+          ...baseSorted.slice(0, selIdx),
+          ...baseSorted.slice(selIdx + 1),
+        ];
+      } else {
+        sortedCrops = baseSorted;
+      }
+    } else {
+      sortedCrops = baseSorted;
+    }
+
     const visibleCount = this.CROP_PAGE_SIZE;
     const maxStartIndex = Math.max(0, sortedCrops.length - visibleCount);
     const safeStartIndex = Math.min(Math.max(currentPage, 0), maxStartIndex);
+
+    // When there are fewer crops than the page size the track should fill the
+    // full viewport width (each card stretches equally) instead of keeping
+    // the fixed per-card size that leaves empty whitespace on the right.
+    const isFilling = sortedCrops.length <= visibleCount;
 
     if (sortedCrops.length === 0) {
       return (
@@ -2759,9 +3124,90 @@ export default class CropDistributionWidget extends React.PureComponent<
       );
     }
 
+    // Helper: build a single crop card element (shared across fill & slide modes)
+    const renderCropCard = (crop: CropData) => {
+      const cropColor = this.getCropColor(crop.ekin_turi);
+      const selectedTextColor = this.getReadableTextColor(cropColor);
+      const isSelected = this.state.selectedCrop === crop.ekin_turi;
+
+      // In fill mode each card grows equally; in slide mode each card is
+      // exactly 1/visibleCount of the track width.
+      const cardFlex = isFilling
+        ? "1 1 0"
+        : `0 0 calc((100% - ${(visibleCount - 1) * containerGap}px) / ${visibleCount})`;
+      const cardMinWidth = isFilling
+        ? "0"
+        : `calc((100% - ${(visibleCount - 1) * containerGap}px) / ${visibleCount})`;
+
+      const cropCardStyle: React.CSSProperties = {
+        flex: cardFlex,
+        minWidth: cardMinWidth,
+        height: "100%",
+        padding: `${cardPadding}px`,
+        gap: `${elementGap}px`,
+        boxSizing: "border-box",
+      };
+      (cropCardStyle as any)["--crop-wave-color"] = cropColor;
+      (cropCardStyle as any)["--crop-selected-text"] = selectedTextColor;
+
+      const waterUsageLabel =
+        lang === "ru"
+          ? "Расход воды"
+          : lang === "uz_cyrl"
+            ? "Сув сарфи"
+            : "Suv sarfi";
+
+      return (
+        <div
+          key={crop.ekin_turi}
+          className={`crop-card ${isSelected ? "selected" : ""}`}
+          onClick={() => this.handleCropSelection(crop.ekin_turi)}
+          role="button"
+          aria-pressed={isSelected}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              this.handleCropSelection(crop.ekin_turi);
+            }
+          }}
+          style={cropCardStyle}
+        >
+          {this.renderCropWaveLayer(cropColor, isSelected)}
+          <div
+            className="crop-header"
+            style={{ gap: `${Math.max(2, elementGap * 0.75)}px` }}
+          >
+            <span className="crop-name" style={{ fontSize: "16px" }}>
+              {translateCropName(this.state.lang as any, crop.ekin_turi)}
+            </span>
+          </div>
+          <div
+            className="crop-water-usage"
+            style={{ gap: `${Math.max(1, elementGap * 0.5)}px` }}
+          >
+            <div className="crop-water-head">
+              <span
+                className="water-icon"
+                style={{ fontSize: `${waterSize}px` }}
+              >
+                💧
+              </span>
+              <span className="water-label" style={{ fontSize: "12px" }}>
+                {waterUsageLabel}
+              </span>
+            </div>
+          </div>
+          <span className="water-value" style={{ fontSize: "16px" }}>
+            {this.formatNumber(crop.uw)} m³
+          </span>
+        </div>
+      );
+    };
+
     return (
       <div className="crop-cards-paginated-wrap">
-        {sortedCrops.length > visibleCount && (
+        {!isFilling && sortedCrops.length > visibleCount && (
           <Button
             className="crop-pagination-btn crop-pagination-btn-left"
             size="sm"
@@ -2780,105 +3226,23 @@ export default class CropDistributionWidget extends React.PureComponent<
 
         <div
           className="crop-cards-viewport"
-          style={{
-            padding: `${containerPadding}px`,
-          }}
+          style={{ padding: `${containerPadding}px` }}
         >
           <div
             className="crop-cards-track"
             style={{
               gap: `${containerGap}px`,
-              transform: `translateX(calc(-${safeStartIndex} * ((100% - ${(visibleCount - 1) * containerGap}px) / ${visibleCount} + ${containerGap}px)))`,
+              // In fill mode there is nothing to translate; the track sits flush.
+              transform: isFilling
+                ? "translateX(0)"
+                : `translateX(calc(-${safeStartIndex} * ((100% - ${(visibleCount - 1) * containerGap}px) / ${visibleCount} + ${containerGap}px)))`,
             }}
           >
-            {sortedCrops.map((crop) => {
-              const cropColor = this.getCropColor(crop.ekin_turi);
-              const selectedTextColor = this.getReadableTextColor(cropColor);
-              const cropCardStyle: React.CSSProperties = {
-                flex: `0 0 calc((100% - ${(visibleCount - 1) * containerGap}px) / ${visibleCount})`,
-                minWidth: `calc((100% - ${(visibleCount - 1) * containerGap}px) / ${visibleCount})`,
-                height: "100%",
-                padding: `${cardPadding}px`,
-                gap: `${elementGap}px`,
-                boxSizing: "border-box",
-              };
-              (cropCardStyle as any)["--crop-wave-color"] = cropColor;
-              (cropCardStyle as any)["--crop-selected-text"] =
-                selectedTextColor;
-
-              const waterUsageLabel =
-                lang === "ru"
-                  ? "Расход воды"
-                  : lang === "uz_cyrl"
-                    ? "Сув сарфи"
-                    : "Suv sarfi";
-              return (
-                <div
-                  key={crop.ekin_turi}
-                  className={`crop-card ${
-                    this.state.selectedCrop === crop.ekin_turi ? "selected" : ""
-                  }`}
-                  onClick={() => this.handleCropSelection(crop.ekin_turi)}
-                  role="button"
-                  aria-pressed={this.state.selectedCrop === crop.ekin_turi}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      this.handleCropSelection(crop.ekin_turi);
-                    }
-                  }}
-                  style={cropCardStyle}
-                >
-                  {this.renderCropWaveLayer(
-                    cropColor,
-                    this.state.selectedCrop === crop.ekin_turi,
-                  )}
-                  <div
-                    className="crop-header"
-                    style={{ gap: `${Math.max(2, elementGap * 0.75)}px` }}
-                  >
-                    <span
-                      className="crop-name"
-                      style={{
-                        fontSize: "16px",
-                      }}
-                    >
-                      {translateCropName(
-                        this.state.lang as any,
-                        crop.ekin_turi,
-                      )}
-                    </span>
-                  </div>
-                  <div
-                    className="crop-water-usage"
-                    style={{ gap: `${Math.max(1, elementGap * 0.5)}px` }}
-                  >
-                    <div className="crop-water-head">
-                      <span
-                        className="water-icon"
-                        style={{ fontSize: `${waterSize}px` }}
-                      >
-                        💧
-                      </span>
-                      <span
-                        className="water-label"
-                        style={{ fontSize: "12px" }}
-                      >
-                        {waterUsageLabel}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="water-value" style={{ fontSize: "16px" }}>
-                    {this.formatNumber(crop.uw)} m³
-                  </span>
-                </div>
-              );
-            })}
+            {sortedCrops.map((crop) => renderCropCard(crop))}
           </div>
         </div>
 
-        {sortedCrops.length > visibleCount && (
+        {!isFilling && sortedCrops.length > visibleCount && (
           <Button
             className="crop-pagination-btn crop-pagination-btn-right"
             size="sm"
@@ -2902,7 +3266,8 @@ export default class CropDistributionWidget extends React.PureComponent<
   };
 
   handleClearSelection = (event) => {
-    if (event?.detail?.source === "EvapoWidget") {
+    const src = String(event?.detail?.source || "");
+    if (src === "EvapoWidget" || src === "LocalizationWidgetV20") {
       this.setState({
         selectedCrop: null,
         activeSlice: null,
@@ -2913,7 +3278,12 @@ export default class CropDistributionWidget extends React.PureComponent<
   handleExternalDependentReset = (event) => {
     if (event?.detail?.source !== "EvapoWidget") return;
     const reason = String(event?.detail?.reason || "");
-    if (reason !== "tumanChanged" && reason !== "fermerChanged") return;
+    if (
+      reason !== "viloyatChanged" &&
+      reason !== "tumanChanged" &&
+      reason !== "fermerChanged"
+    )
+      return;
 
     // Only clear dependent state here. Do NOT call fetchCropData() — the
     // waterSupplyFilterChanged event fired by LocalizationWidgetV20 immediately
@@ -2934,6 +3304,17 @@ export default class CropDistributionWidget extends React.PureComponent<
   // Handle crop selection
   handleCropSelection = (cropName: string) => {
     if (this.state.connectionStatus !== "connected") {
+      return;
+    }
+
+    // Verify crop exists in the current data (already cross-validated against layer)
+    const cropExists = this.state.cropData.crops.some(
+      (c) => c.ekin_turi === cropName,
+    );
+    if (!cropExists) {
+      console.warn(
+        `[EvapoCropV32] Crop "${cropName}" not in current crop list`,
+      );
       return;
     }
 
@@ -3108,15 +3489,26 @@ export default class CropDistributionWidget extends React.PureComponent<
 
       // ✅ year if provided & field exists
       const hasYil = featureLayerFields?.some((f) => f.toLowerCase() === "yil");
+      let yilClause = "";
       if (hasYil && yil && /^\d{4}$/.test(yil)) {
-        clauses.push(`(yil=${Number(yil)} OR yil='${this.escapeArcGIS(yil)}')`);
+        yilClause = `(yil=${Number(yil)} OR yil='${this.escapeArcGIS(yil)}')`;
+        clauses.push(yilClause);
       }
 
       query.where = clauses.length ? clauses.join(" AND ") : "1=1";
 
       console.log("[EvapoCrop] Query for zoom:", query.where);
 
-      const result = await featureLayer.queryExtent(query);
+      let result = await featureLayer.queryExtent(query);
+
+      // Fallback: if 0 results with yil, retry without yil (year-layer mode)
+      if (result.count === 0 && yilClause && clauses.length > 1) {
+        const clausesNoYil = clauses.filter((c) => c !== yilClause);
+        query.where = clausesNoYil.join(" AND ");
+        console.log("[EvapoCrop] Retrying zoom without yil:", query.where);
+        result = await featureLayer.queryExtent(query);
+      }
+
       console.log("[EvapoCrop] Query result:", {
         count: result.count,
         hasCrop: cropName,

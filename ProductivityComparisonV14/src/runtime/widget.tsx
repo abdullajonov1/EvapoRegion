@@ -88,7 +88,10 @@ const SELECTION_LAYER_ID = "yield-water-selection-layer";
 // =============================================
 // LOCALIZATION - Import from local messages.ts
 // =============================================
-import { translateCropName } from "../../../EvapoCropV32/src/runtime/messages";
+import {
+  registerCropTranslations,
+  translateCropName,
+} from "../../../EvapoCropV32/src/runtime/messages";
 import {
   getInitialLang,
   LangCode,
@@ -603,6 +606,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 > {
   private _isMounted = false;
   private _dirTranslationReqId = 0;
+  private _dirTranslationLoaded: Partial<Record<LangCode, boolean>> = {};
   private _dirTranslationCache: Partial<
     Record<
       LangCode,
@@ -733,6 +737,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     // Language change listener
     document.addEventListener("languageChanged", this.onLanguageChanged);
+    document.addEventListener("appLanguageChanged", this.onLanguageChanged);
     void this.ensureDirectoryTranslationCache(this.state.lang);
 
     this.startResizeObserverIfReady();
@@ -794,6 +799,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
     // Remove language listener
     document.removeEventListener("languageChanged", this.onLanguageChanged);
+    document.removeEventListener("appLanguageChanged", this.onLanguageChanged);
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -813,7 +819,8 @@ export default class YieldWaterChartWidget extends React.PureComponent<
   /** Language change event handler */
   private onLanguageChanged = (ev: Event): void => {
     const ce = ev as CustomEvent;
-    const newLang = ce?.detail?.lang;
+    const detail: any = ce?.detail || {};
+    const newLang = detail?.lang ?? detail?.language ?? detail?.code;
     if (!newLang || !this._isMounted) return;
 
     const normalized = normalizeLangCode(newLang);
@@ -882,7 +889,7 @@ export default class YieldWaterChartWidget extends React.PureComponent<
   };
 
   private async fetchDirectoryList(
-    key: "Region" | "District",
+    key: "Region" | "District" | "Crop type",
     lang: "uz" | "kir" | "ru",
   ): Promise<string[]> {
     const typeCandidates = ["Evapo", "Evapo-RegionV20"];
@@ -1020,34 +1027,48 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
   private async ensureDirectoryTranslationCache(lang: LangCode): Promise<void> {
     if (lang === "uz_lat") return;
-    if (this._dirTranslationCache[lang]) return;
+    if (this._dirTranslationLoaded[lang]) return;
 
     const reqId = ++this._dirTranslationReqId;
     try {
-      const [uzRegions, uzDistricts, targetRegions, targetDistricts] =
-        await Promise.all([
-          this.fetchDirectoryList("Region", "uz"),
-          this.fetchDirectoryList("District", "uz"),
-          this.fetchDirectoryList(
-            "Region",
-            this.getApiLangForDirectories(lang),
-          ),
-          this.fetchDirectoryList(
-            "District",
-            this.getApiLangForDirectories(lang),
-          ),
-        ]);
+      const [
+        uzRegions,
+        uzDistricts,
+        uzCrops,
+        targetRegions,
+        targetDistricts,
+        targetCrops,
+      ] = await Promise.all([
+        this.fetchDirectoryList("Region", "uz"),
+        this.fetchDirectoryList("District", "uz"),
+        this.fetchDirectoryList("Crop type", "uz"),
+        this.fetchDirectoryList("Region", this.getApiLangForDirectories(lang)),
+        this.fetchDirectoryList(
+          "District",
+          this.getApiLangForDirectories(lang),
+        ),
+        this.fetchDirectoryList(
+          "Crop type",
+          this.getApiLangForDirectories(lang),
+        ),
+      ]);
 
       if (reqId !== this._dirTranslationReqId) return;
+
+      if (uzCrops.length && targetCrops.length) {
+        registerCropTranslations(lang, uzCrops, targetCrops);
+      }
 
       this._dirTranslationCache[lang] = {
         region: this.buildTranslationMap(uzRegions, targetRegions),
         district: this.buildTranslationMap(uzDistricts, targetDistricts),
       };
+      this._dirTranslationLoaded[lang] = true;
 
       if (this._isMounted) this.forceUpdate();
     } catch {
-      this._dirTranslationCache[lang] = { region: {}, district: {} };
+      delete this._dirTranslationCache[lang];
+      delete this._dirTranslationLoaded[lang];
     }
   }
 
@@ -4348,47 +4369,50 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       const view = jmv?.view as __esri.MapView | __esri.SceneView | undefined;
       if (!view) return;
 
-      // Restore the bin selection (show all fields from the selected bin again)
-      const { rawPoints, selectedYil, selectedViloyat } = this.state;
-      if (rawPoints && rawPoints.length > 0) {
-        // Re-apply the bin selection from rawPoints
-        const globalids = rawPoints
-          .map((p) => this.getRawPointGlobalId(p))
-          .filter(Boolean);
+      this.clearMapSelection();
 
-        if (globalids.length > 0) {
-          await this.applySelectionToMap(globalids, selectedYil);
+      const { savedMapExtent, selectedYil, selectedViloyat } = this.state;
 
-          // Zoom to viloyat extent (region level)
-          if ((view as any).goTo && selectedViloyat) {
-            try {
-              const year = selectedYil;
-              const layer = await this.ensurePolygonLayerInMapAfterLasso(year);
-              if (layer) {
-                const viloyatField =
-                  this.resolveFieldName(layer, "viloyat") ||
-                  this.resolveFieldName(layer, "viloyat_nom") ||
-                  this.resolveFieldName(layer, "region") ||
-                  "viloyat";
-                const where = this.buildExactTextWhere(
-                  viloyatField,
-                  selectedViloyat,
-                  "region",
-                );
-                const extent = await (layer as any).queryExtent({ where });
-                if (extent?.extent) {
-                  await (view as any).goTo(extent.extent.expand(1.1), {
-                    duration: 500,
-                  });
-                }
-              }
-            } catch (zoomErr) {
-              console.warn(
-                "[clearMapSelectionAndZoomOut] zoom to viloyat failed:",
-                zoomErr,
-              );
+      if ((view as any).goTo && savedMapExtent) {
+        try {
+          await (view as any).goTo(savedMapExtent, { duration: 500 });
+          this.setState({ savedMapExtent: null });
+          return;
+        } catch (restoreErr) {
+          console.warn(
+            "[clearMapSelectionAndZoomOut] restore saved extent failed:",
+            restoreErr,
+          );
+        }
+      }
+
+      if ((view as any).goTo && selectedViloyat) {
+        try {
+          const layer =
+            await this.ensurePolygonLayerInMapAfterLasso(selectedYil);
+          if (layer) {
+            const viloyatField =
+              this.resolveFieldName(layer, "viloyat") ||
+              this.resolveFieldName(layer, "viloyat_nom") ||
+              this.resolveFieldName(layer, "region") ||
+              "viloyat";
+            const where = this.buildExactTextWhere(
+              viloyatField,
+              selectedViloyat,
+              "region",
+            );
+            const extent = await (layer as any).queryExtent({ where });
+            if (extent?.extent) {
+              await (view as any).goTo(extent.extent.expand(1.1), {
+                duration: 500,
+              });
             }
           }
+        } catch (zoomErr) {
+          console.warn(
+            "[clearMapSelectionAndZoomOut] zoom to viloyat failed:",
+            zoomErr,
+          );
         }
       }
 

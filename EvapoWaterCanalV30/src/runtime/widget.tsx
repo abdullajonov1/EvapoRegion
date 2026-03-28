@@ -320,7 +320,9 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
   /* ═══════ RESIZE OBSERVER ═══════ */
   private setupResizeObserver = (): void => {
     if (!this.containerRef.current) {
-      requestAnimationFrame(() => this.setupResizeObserver());
+      requestAnimationFrame(() => {
+        if (this._isMounted) this.setupResizeObserver();
+      });
       return;
     }
     this.resizeObserver = new ResizeObserver((entries) => {
@@ -1071,25 +1073,27 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     if (d.yil !== undefined)
       newState.yil = this.normalizeYearValue(d.yil) || DEFAULT_INITIAL_YEAR;
 
-    // When tuman changes, clear canal and water-source selections so the new
-    // district's data is shown without stale filters (fixes async setState race).
+    // When region context changes, clear dependent selections so new area's data
+    // is shown without stale water/canal/crop/minmax constraints.
+    const viloyatChanged =
+      d.viloyat !== undefined && (d.viloyat || "") !== this.state.viloyat;
     const tumanChanged =
       d.tuman !== undefined && (d.tuman || "") !== this.state.tuman;
-    if (tumanChanged) {
+    if (viloyatChanged || tumanChanged) {
       newState.selectedSource = null;
       (newState as any).selectedSourceSnapshot = null;
       newState.selectedWaterSource = "";
       newState.selectedCanal = null;
       (newState as any).selectedCanalSnapshot = null;
       newState.lastCanalEventTimestamp = 0;
-      // Tuman changed: dependent filters must return to default state.
       newState.ekinTuri = "";
       newState.minMax = null;
       newState.lastMinMaxEventTimestamp = 0;
     }
 
-    // When fermer_nom changes (and tuman did not change), also clear selections.
+    // When fermer_nom changes (and region context did not change), also clear selections.
     const fermerNomChanged =
+      !viloyatChanged &&
       !tumanChanged &&
       d.fermer_nom !== undefined &&
       (d.fermer_nom || "") !== (this.state.fermerNom || "");
@@ -1100,7 +1104,6 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       newState.selectedCanal = null;
       (newState as any).selectedCanalSnapshot = null;
       newState.lastCanalEventTimestamp = 0;
-      // Fermer changed: dependent filters must return to default state.
       newState.ekinTuri = "";
       newState.minMax = null;
       newState.lastMinMaxEventTimestamp = 0;
@@ -1395,7 +1398,8 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
   };
 
   private onClearWaterSource = (e: any): void => {
-    if (e?.detail?.source === "EvapoWidget") {
+    const src = String(e?.detail?.source || "");
+    if (src === "EvapoWidget" || src === "LocalizationWidgetV20") {
       this.setState({
         selectedSource: null,
         selectedSourceSnapshot: null,
@@ -1405,28 +1409,31 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
   };
 
   private onClearCanal = (e: any): void => {
-    if (e?.detail?.source === "EvapoWidget") {
+    const src = String(e?.detail?.source || "");
+    if (src === "EvapoWidget" || src === "LocalizationWidgetV20") {
       this.setState({ selectedCanal: null, selectedCanalSnapshot: null });
     }
   };
 
   private onClearCrop = (e: any): void => {
-    if (e?.detail?.source === "EvapoWidget") {
+    const src = String(e?.detail?.source || "");
+    if (src === "EvapoWidget" || src === "LocalizationWidgetV20") {
       this.setState({ ekinTuri: "" }, () => {
-        const viewType = this.props.config?.viewType || "waterSource";
-        if (viewType === "waterSource") {
-          this.fetchSourcesData();
-        } else {
-          this.fetchCanalData();
-        }
+        this.scheduleExternalDataFetch();
       });
     }
   };
 
   private onRegionDependentFiltersReset = (e: any): void => {
-    if (e?.detail?.source !== "EvapoWidget") return;
+    const src = String(e?.detail?.source || "");
+    if (src !== "EvapoWidget" && src !== "LocalizationWidgetV20") return;
     const reason = String(e?.detail?.reason || "");
-    if (reason !== "tumanChanged" && reason !== "fermerChanged") return;
+    if (
+      reason !== "viloyatChanged" &&
+      reason !== "tumanChanged" &&
+      reason !== "fermerChanged"
+    )
+      return;
 
     const viewType = this.props.config?.viewType || "waterSource";
     this.setState(
@@ -1442,11 +1449,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         lastMinMaxEventTimestamp: 0,
       } as any,
       () => {
-        if (viewType === "waterSource") {
-          this.fetchSourcesData();
-        } else {
-          this.fetchCanalData();
-        }
+        this.scheduleExternalDataFetch();
       },
     );
   };
@@ -1485,11 +1488,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
             : "",
         },
         () => {
-          if (viewType === "waterSource") {
-            this.fetchSourcesData();
-          } else {
-            this.fetchCanalData();
-          }
+          this.scheduleExternalDataFetch();
         },
       );
     } catch {
@@ -1593,12 +1592,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       return;
     }
 
-    const viewType = this.props.config?.viewType || "waterSource";
-    if (viewType === "waterSource") {
-      this.fetchSourcesData();
-    } else {
-      this.fetchCanalData();
-    }
+    this.scheduleExternalDataFetch();
   }
 
   private retryMapConnection = (): void => {
@@ -1998,12 +1992,20 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
         }
       }
 
+      let yilClause = "";
       if (hasField("yil") && yil && /^\d{4}$/.test(yil)) {
-        clauses.push(`yil=${Number(yil)}`);
+        yilClause = `yil=${Number(yil)}`;
+        clauses.push(yilClause);
       }
 
       query.where = clauses.join(" AND ");
-      const result = await featureLayer.queryExtent(query);
+      let result = await featureLayer.queryExtent(query);
+      // Fallback: if 0 results with yil, retry without it (year-layer mode)
+      if (result?.count === 0 && yilClause && clauses.length > 1) {
+        const clausesNoYil = clauses.filter((c) => c !== yilClause);
+        query.where = clausesNoYil.join(" AND ");
+        result = await featureLayer.queryExtent(query);
+      }
       if (result?.extent) {
         document.dispatchEvent(
           new CustomEvent("zoomRequest", {

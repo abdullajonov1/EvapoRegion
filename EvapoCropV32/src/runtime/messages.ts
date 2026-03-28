@@ -4,6 +4,13 @@ export type LangCode = "uz_lat" | "uz_cyrl" | "ru";
 type Dict = Record<string, string>;
 type Bundle = Record<LangCode, Dict>;
 
+const normalizeCropLookupKey = (value: string): string =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[‘’`ʻʼʹʽ´]/g, "'")
+    .replace(/\s+/g, " ");
+
 const MESSAGES: Bundle = {
   uz_lat: {
     "evapoCrop.title": "Ekinlar",
@@ -99,6 +106,12 @@ const CROP_NAMES: Record<string, Record<LangCode, string>> = {
   },
 };
 
+const DYNAMIC_CROP_NAMES: Partial<Record<LangCode, Record<string, string>>> = {
+  uz_lat: {},
+  uz_cyrl: {},
+  ru: {},
+};
+
 const PREFS_INIT_KEY = "evapo_pref_initialized";
 
 const ensureInitialPrefs = (): void => {
@@ -119,9 +132,37 @@ export function t(lang: LangCode, key: string): string {
   return dict[key] ?? key;
 }
 
+export function registerCropTranslations(
+  lang: LangCode,
+  baseValues: string[],
+  translatedValues: string[],
+): void {
+  if (lang === "uz_lat") return;
+
+  const bucket = DYNAMIC_CROP_NAMES[lang] || {};
+  const count = Math.min(baseValues.length, translatedValues.length);
+  for (let index = 0; index < count; index++) {
+    const from = normalizeCropLookupKey(baseValues[index]);
+    const to = String(translatedValues[index] ?? "").trim();
+    if (from && to) bucket[from] = to;
+  }
+  DYNAMIC_CROP_NAMES[lang] = bucket;
+}
+
 export function translateCropName(lang: LangCode, cropName: string): string {
+  const normalized = normalizeCropLookupKey(cropName);
+  const dynamic = DYNAMIC_CROP_NAMES[lang]?.[normalized];
+  if (dynamic) return dynamic;
+
   const item = CROP_NAMES[cropName];
   if (item) return item[lang] || cropName;
+
+  for (const [rawName, translations] of Object.entries(CROP_NAMES)) {
+    if (normalizeCropLookupKey(rawName) === normalized) {
+      return translations[lang] || cropName;
+    }
+  }
+
   return cropName;
 }
 

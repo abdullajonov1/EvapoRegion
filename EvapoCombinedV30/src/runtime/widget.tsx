@@ -924,7 +924,9 @@ export default class WaterUnifiedWidget extends React.PureComponent<
 
     const reason = String(event?.detail?.reason || "");
     const shouldClearMinMax =
-      reason === "tumanChanged" || reason === "fermerChanged";
+      reason === "viloyatChanged" ||
+      reason === "tumanChanged" ||
+      reason === "fermerChanged";
 
     this.setState(
       (prev) => {
@@ -1595,9 +1597,11 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       const nextYil =
         this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR;
 
+      const viloyatChanged = nextViloyat !== (this.state.viloyat || "");
       const tumanChanged = nextTuman !== (this.state.tuman || "");
       const fermerChanged = nextFermer !== (this.state.fermer_nomNom || "");
-      const shouldResetDependentFilters = tumanChanged || fermerChanged;
+      const shouldResetDependentFilters =
+        viloyatChanged || tumanChanged || fermerChanged;
 
       const hasNoChanges =
         nextViloyat === (this.state.viloyat || "") &&
@@ -1643,11 +1647,14 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       : String(filters.mavsum ?? "");
     const nextTuman = filters.tuman || "";
     const nextFermer = filters.fermer_nomNom || "";
+    const nextViloyat = filters.viloyat || "";
+    const viloyatChanged = nextViloyat !== (this.state.viloyat || "");
     const tumanChanged = nextTuman !== (this.state.tuman || "");
     const fermerChanged = nextFermer !== (this.state.fermer_nomNom || "");
-    const shouldResetDependentFilters = tumanChanged || fermerChanged;
+    const shouldResetDependentFilters =
+      viloyatChanged || tumanChanged || fermerChanged;
     const newState = {
-      viloyat: filters.viloyat || "",
+      viloyat: nextViloyat,
       tuman: nextTuman,
       mavsum: incomingMavsum,
       fermer_nomNom: nextFermer,

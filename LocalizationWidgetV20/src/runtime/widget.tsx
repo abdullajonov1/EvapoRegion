@@ -1296,23 +1296,10 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
   private async hasCanalNameInActiveDs(canalName: string): Promise<boolean> {
     const value = String(canalName ?? "").trim();
-    if (!value) return false;
-
-    try {
-      const ds = this.regionFilterEngine.getActiveDs(this.state.filters) as any;
-      if (!ds?.query) return false;
-
-      const escaped = value.replace(/'/g, "''");
-      const response = await ds.query({
-        where: `kanal_nomi='${escaped}'`,
-        outFields: ["kanal_nomi"],
-        pageSize: 1,
-        returnGeometry: false,
-      });
-      return Array.isArray(response?.records) && response.records.length > 0;
-    } catch {
-      return false;
-    }
+    // Canal values come from trusted widget events; active DS may legitimately
+    // have 0 rows (fallback-layer mode), so DS existence checks can incorrectly
+    // drop valid canal filters.
+    return !!value;
   }
 
   private async resolveRawCanalName(input: any): Promise<string> {
@@ -1321,7 +1308,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     const key = this.normalizeLookupKey(value);
 
-    // Accept only if the value exists in active DS as a real canal name.
+    // Accept non-empty raw canal names from trusted cross-widget events.
     if (await this.hasCanalNameInActiveDs(value)) return value;
 
     const lang = this.state.currentLang;
@@ -1377,10 +1364,46 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const cropType = String(event?.detail?.cropType ?? "").trim();
     const variants = this.getApostropheVariants(cropType);
 
-    const cropFilter = variants.length
-      ? variants.length === 1
-        ? `ekin_turi='${this.escapeSqlLiteral(variants[0])}'`
-        : `(${variants
+    // For compound names like "Qovun-tarvuz", also add each part and
+    // common map-side aliases so the layer filter actually matches.
+    const allVariants = new Set<string>(variants);
+    const parts = cropType
+      .split(/[-/]/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length > 1) {
+      for (const part of parts) {
+        this.getApostropheVariants(part).forEach((v) => allVariants.add(v));
+      }
+    }
+
+    // Known API→layer name aliases
+    const lower = cropType.toLowerCase().replace(/[`''\u02bb\u02bc]/g, "'");
+    const CROP_ALIASES: Record<string, string[]> = {
+      "qovun-tarvuz": [
+        "Qovun-tarvuz",
+        "Qovun tarvuz",
+        "Qovun",
+        "Tarvuz",
+        "qovun-tarvuz",
+        "qovun tarvuz",
+        "qovun",
+        "tarvuz",
+      ],
+      "yeryong'oq": ["Yeryong'oq", "Yer yong'oq", "yeryong'oq", "yer yong'oq"],
+    };
+    if (CROP_ALIASES[lower]) {
+      for (const alias of CROP_ALIASES[lower]) {
+        this.getApostropheVariants(alias).forEach((v) => allVariants.add(v));
+      }
+    }
+
+    const finalVariants = Array.from(allVariants).filter(Boolean);
+
+    const cropFilter = finalVariants.length
+      ? finalVariants.length === 1
+        ? `ekin_turi='${this.escapeSqlLiteral(finalVariants[0])}'`
+        : `(${finalVariants
             .map((v) => `ekin_turi='${this.escapeSqlLiteral(v)}'`)
             .join(" OR ")})`
       : "";
@@ -2205,15 +2228,92 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     });
     if (shouldZoom) {
       // Zoom to fallback layer if one was activated, otherwise DS active layer
-      const zoomLayer = this._fallbackLayerId
+      let zoomLayer = this._fallbackLayerId
         ? this.getFallbackLayer()
         : activeLayer;
       if (zoomLayer) {
+        // Pre-check: if the zoom target has 0 features for the strict WHERE,
+        // fall back to the base region WHERE so the map at least shows the
+        // correct region (avoids "[Map] Extent invalid or empty" for narrow
+        // crop+canal+min_max combos that have no feature-layer data).
+        let effectiveZoomWhere = where;
+        let zoomFeatureCount = -1;
+        try {
+          const checkQ = zoomLayer.createQuery
+            ? zoomLayer.createQuery()
+            : ({} as any);
+          checkQ.where = where;
+          zoomFeatureCount = Number(
+            (await zoomLayer.queryFeatureCount(checkQ)) || 0,
+          );
+        } catch {}
+        if (zoomFeatureCount === 0 && this.regionFilterEngine) {
+          const baseRegionWhere =
+            this.regionFilterEngine.buildWhereClause(filters);
+          if (baseRegionWhere && baseRegionWhere !== where) {
+            effectiveZoomWhere = baseRegionWhere;
+
+            // Re-check: does the current zoom layer have features for
+            // baseRegionWhere?  For regions like Qashqadaryo the DS active
+            // layer has 0 features even for the base region.  In that case
+            // find any feature layer with a viloyat field that *does* have
+            // matching features and zoom on it instead.
+            let baseCount = -1;
+            try {
+              const bq = zoomLayer.createQuery
+                ? zoomLayer.createQuery()
+                : ({} as any);
+              bq.where = baseRegionWhere;
+              baseCount = Number((await zoomLayer.queryFeatureCount(bq)) || 0);
+            } catch {}
+            if (baseCount === 0) {
+              try {
+                const v: any = this._jimuMapView?.view;
+                const allM: any[] =
+                  v?.map?.allLayers?.toArray?.() ||
+                  v?.map?.allLayers?.items ||
+                  [];
+                for (const ml of allM) {
+                  if (!ml || ml.type !== "feature" || ml.id === zoomLayer.id)
+                    continue;
+                  const flds: any[] = ml.fields || [];
+                  if (
+                    !Array.isArray(flds) ||
+                    !flds.some(
+                      (f: any) =>
+                        String(f?.name || "").toLowerCase() === "viloyat",
+                    )
+                  )
+                    continue;
+                  try {
+                    const mq = ml.createQuery ? ml.createQuery() : ({} as any);
+                    mq.where = baseRegionWhere;
+                    const mc = Number((await ml.queryFeatureCount(mq)) || 0);
+                    if (mc > 0) {
+                      zoomLayer = ml;
+                      console.log(
+                        "[LocalizationWidgetV20] Zoom target switched to layer with data:",
+                        ml.id,
+                        { baseRegionWhere, count: mc },
+                      );
+                      break;
+                    }
+                  } catch {}
+                }
+              } catch {}
+            }
+
+            console.log(
+              "[LocalizationWidgetV20] Strict WHERE has 0 features, zooming with base region WHERE",
+              { baseRegionWhere },
+            );
+          }
+        }
         console.log("[LocalizationWidgetV20] Zooming to filtered extent...", {
           layerId: zoomLayer.id,
           isFallback: !!this._fallbackLayerId,
         });
-        await this.zoomToFilteredExtent(zoomLayer, where);
+        await this.zoomToFilteredExtent(zoomLayer, effectiveZoomWhere);
       }
     } else {
       console.log(
@@ -2813,8 +2913,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
               ? { mavsum: value, fermer_nom: "" }
               : { fermer_nom: value };
 
-    // Special handling: tuman or fermer_nom change → reset all dependent filters
-    if (key === "tuman") {
+    // Special handling for hierarchical filters:
+    // - viloyat/tuman/fermer changes must clear dependent external filters.
+    if (key === "viloyat") {
+      this.handleViloyatChange(value, nextPartial);
+    } else if (key === "tuman") {
       this.handleTumanChange(value, nextPartial);
     } else if (key === "fermer_nom") {
       this.handleFermerChange(value, nextPartial);
@@ -2883,6 +2986,27 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         callback();
       },
     );
+  };
+
+  /**
+   * When viloyat changes, reset all dependent external filters (crop, canal, source)
+   * and clear min/max polygon. This prevents stale constraints from previous region.
+   */
+  private handleViloyatChange = (
+    viloyatValue: string,
+    nextPartial: Partial<LocalFilterState>,
+  ): void => {
+    const prevViloyat = this.state.filters.viloyat;
+
+    // Only reset if actually changing viloyat
+    if (viloyatValue === prevViloyat) return;
+
+    this.resetExternalFilters("viloyatChanged", () => {
+      this.updateFilter(nextPartial, (nextFilters) => {
+        void this.refreshRegionFilterOptions(nextFilters);
+        void this.applyMapFilters();
+      });
+    });
   };
 
   /**
