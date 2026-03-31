@@ -38,6 +38,12 @@ export class LocalRegionFilterEngine {
     return { ...this.yearToDsId };
   }
 
+  /** Get all DS ids that contain the selected year */
+  async getDsIdsMatchingYear(yil: string): Promise<string[]> {
+    const dsList = await this.getDataSourcesMatchingYear(yil);
+    return dsList.map((ds: any) => String(ds?.id || "")).filter(Boolean);
+  }
+
   /** Get the DS URL for a given DS ID (used for URL-based layer matching) */
   getDsUrl(dsId: string): string {
     const ds: any = this.dsById[dsId];
@@ -139,9 +145,39 @@ export class LocalRegionFilterEngine {
     filterObj: Record<string, string>,
     filters: LocalFilterState,
   ): Promise<string[]> {
+    // For viloyat options with a selected year, aggregate from ALL selected DS
+    // that actually contain that year (e.g. all layers having yil=2025).
+    if (field.toLowerCase() === "viloyat" && filters.yil) {
+      const dsList = await this.getDataSourcesMatchingYear(filters.yil);
+      if (!dsList.length) return [];
+      const merged = new Set<string>();
+
+      for (const ds of dsList) {
+        if (!this.hasField(ds, field)) continue;
+        const options = await this.fetchDependentFiltersFromDs(
+          ds,
+          field,
+          filterObj,
+          filters,
+        );
+        options.forEach((v) => merged.add(v));
+      }
+
+      return this.sortDistinct(Array.from(merged));
+    }
+
     const ds = this.getActiveDs(filters);
     if (!ds) return [];
+    if (!this.hasField(ds, field)) return [];
+    return this.fetchDependentFiltersFromDs(ds, field, filterObj, filters);
+  }
 
+  private async fetchDependentFiltersFromDs(
+    ds: QueriableDataSource,
+    field: string,
+    filterObj: Record<string, string>,
+    filters: LocalFilterState,
+  ): Promise<string[]> {
     // Guard: target field must exist on DS
     if (!this.hasField(ds, field)) return [];
 
@@ -172,6 +208,14 @@ export class LocalRegionFilterEngine {
       }
 
       parts.push(this.whereEq(realK, v, realK.toLowerCase() === "yil"));
+    }
+
+    // Ensure selected year is always enforced when present.
+    // This is especially important for viloyat option loading across DS.
+    if (filters.yil && this.hasField(ds, "yil")) {
+      const yilField = this.resolveFieldName(ds, "yil") || "yil";
+      const yilClause = this.whereEq(yilField, filters.yil, true);
+      if (yilClause) parts.push(yilClause);
     }
 
     const whereClause = parts.length ? parts.join(" AND ") : "1=1";
@@ -205,6 +249,39 @@ export class LocalRegionFilterEngine {
     } catch {
       return [];
     }
+  }
+
+  private async getDataSourcesMatchingYear(
+    yil: string,
+  ): Promise<QueriableDataSource[]> {
+    const normalizedYear = this.normalizeYear(yil);
+    if (!normalizedYear) return [];
+
+    const dsList: QueriableDataSource[] = [];
+    for (const dsId of this.selectedDsIds) {
+      const ds = this.dsById[dsId];
+      if (!ds || !this.hasField(ds, "yil")) continue;
+
+      const yilField = this.resolveFieldName(ds, "yil") || "yil";
+      const where = this.whereEq(yilField, normalizedYear, true);
+      if (!where) continue;
+
+      try {
+        const res = await (ds as any).query({
+          where,
+          outFields: [yilField],
+          returnDistinctValues: false,
+          returnGeometry: false,
+          pageSize: 1,
+        });
+        if ((res?.records || []).length > 0) {
+          dsList.push(ds);
+        }
+      } catch {
+        // Skip DS query failures; continue collecting from others.
+      }
+    }
+    return dsList;
   }
 
   // ---- PRIVATE HELPERS ----
@@ -302,43 +379,19 @@ export class LocalRegionFilterEngine {
     ds: QueriableDataSource | null,
     fieldName: string,
   ): string | null {
-    if (!ds || !fieldName) {
-      console.warn("[LocalRegionFilter] resolveFieldName: no ds or fieldName");
-      return null;
-    }
+    if (!ds || !fieldName) return null;
     try {
       const schema = (ds as any)?.getSchema?.();
       const fields = (schema as any)?.fields;
-      if (!fields) {
-        console.warn("[LocalRegionFilter] resolveFieldName: no schema fields");
-        return null;
-      }
+      if (!fields) return null;
       const target = fieldName.toLowerCase();
       const availableFields = Object.keys(fields);
-      console.log(
-        "[LocalRegionFilter] resolveFieldName: looking for",
-        fieldName,
-        "in fields:",
-        availableFields.slice(0, 10).join(", "),
-      );
       for (const key of availableFields) {
         if (String(key).toLowerCase() === target) {
-          console.log(
-            "[LocalRegionFilter] resolveFieldName: FOUND",
-            fieldName,
-            "→",
-            key,
-          );
           return key;
         }
       }
-      console.warn(
-        "[LocalRegionFilter] resolveFieldName: NOT FOUND",
-        fieldName,
-      );
-    } catch (e) {
-      console.error("[LocalRegionFilter] resolveFieldName error:", e);
-    }
+    } catch {}
     return null;
   }
 
@@ -491,29 +544,10 @@ export class LocalRegionFilterEngine {
     const c: string[] = [];
     const ds = this.getActiveDs(filters);
 
-    console.log("[LocalRegionFilter] buildWhereClause called with filters:", {
-      viloyat: filters.viloyat,
-      tuman: filters.tuman,
-      yil: filters.yil,
-      dsId: (ds as any)?.id,
-    });
-
     // Helper: resolve field and push if present
     const pushIfHas = (field: string, value: string, forceNumeric = false) => {
-      if (!value || !ds) {
-        console.log("[LocalRegionFilter] pushIfHas skipped:", {
-          field,
-          value,
-          hasDs: !!ds,
-        });
-        return;
-      }
+      if (!value || !ds) return;
       const resolved = this.resolveFieldName(ds, field);
-      console.log("[LocalRegionFilter] Field resolution:", {
-        field,
-        value,
-        resolved,
-      });
       if (resolved) {
         const clause =
           !forceNumeric && field === "viloyat"
@@ -523,13 +557,7 @@ export class LocalRegionFilterEngine {
                 this.getRegionValueVariants(value),
               )
             : this.whereEq(resolved, value, forceNumeric);
-        console.log("[LocalRegionFilter] WHERE clause built:", clause);
         c.push(clause);
-      } else {
-        console.warn(
-          "[LocalRegionFilter] Field not found in datasource:",
-          field,
-        );
       }
     };
 
@@ -560,7 +588,6 @@ export class LocalRegionFilterEngine {
     pushIfHas("fermer_nom", filters.fermer_nom);
 
     const result = c.length ? c.join(" AND ") : "1=1";
-    console.log("[LocalRegionFilter] Final WHERE clause:", result);
     return result;
   }
 
@@ -589,8 +616,7 @@ export class LocalRegionFilterEngine {
 
       // Return true if at least 1 record exists
       return (res?.records || []).length > 0;
-    } catch (error) {
-      console.warn("Error validating filter combination:", error);
+    } catch {
       return false; // Assume invalid if query fails
     }
   }

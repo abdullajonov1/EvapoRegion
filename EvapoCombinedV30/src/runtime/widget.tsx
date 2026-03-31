@@ -572,7 +572,7 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       normalized.includes("ikkilamchi") ||
       normalized.includes("иккиламчи") ||
       normalized.includes("вторич");
-    if (isIkkilamchi) return " Ikkilamchi";
+    if (isIkkilamchi) return "Ikkilamchi";
 
     const isBirlamchi =
       normalized.includes("birlamchi") ||
@@ -1260,13 +1260,30 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       } = this.state;
       const { selectedEkinTuri, selectedManbaNomi, selectedKanalNomi } =
         cropFieldFilters;
+      const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
 
-      const fetchConsumptionFor = async (minMaxValue?: string) => {
+      const isConsumptionPayloadEmpty = (payload: {
+        totalConsumption: number;
+        monthlyData: any[];
+      }): boolean => {
+        const total = this.parseMetricValue(payload.totalConsumption);
+        if (total > 0) return false;
+        return !(payload.monthlyData || []).some(
+          (item) =>
+            this.parseMetricValue(item?.total_consumption_m3) > 0 ||
+            this.parseMetricValue(item?.consumption_m3ha) > 0,
+        );
+      };
+
+      const fetchConsumptionFor = async (
+        minMaxValue?: string,
+        includeMavsum: boolean = true,
+      ) => {
         const queryParams = new URLSearchParams();
         if (viloyat) queryParams.append("viloyat", viloyat);
         if (tuman) queryParams.append("tuman", tuman);
-        const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
-        if (normalizedMavsum) queryParams.append("mavsum", normalizedMavsum);
+        if (includeMavsum && normalizedMavsum)
+          queryParams.append("mavsum", normalizedMavsum);
         if (fermer_nomNom) queryParams.append("fermer_nom", fermer_nomNom);
         if (selectedEkinTuri) queryParams.append("ekin_turi", selectedEkinTuri);
         if (selectedManbaNomi)
@@ -1302,12 +1319,12 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       };
 
       if (minMax && String(minMax).toLowerCase() === "both") {
-        const [minData, maxData] = await Promise.all([
+        let [minData, maxData] = await Promise.all([
           fetchConsumptionFor("min"),
           fetchConsumptionFor("max"),
         ]);
 
-        return {
+        let combined = {
           totalConsumption:
             this.parseMetricValue(minData.totalConsumption) +
             this.parseMetricValue(maxData.totalConsumption),
@@ -1316,9 +1333,37 @@ export default class WaterUnifiedWidget extends React.PureComponent<
             maxData.monthlyData,
           ),
         };
+
+        if (normalizedMavsum && isConsumptionPayloadEmpty(combined)) {
+          console.log(
+            "[WaterUnifiedWidget] Consumption empty with mavsum, retrying without mavsum...",
+          );
+          [minData, maxData] = await Promise.all([
+            fetchConsumptionFor("min", false),
+            fetchConsumptionFor("max", false),
+          ]);
+          combined = {
+            totalConsumption:
+              this.parseMetricValue(minData.totalConsumption) +
+              this.parseMetricValue(maxData.totalConsumption),
+            monthlyData: this.sumMonthlyConsumptionItems(
+              minData.monthlyData,
+              maxData.monthlyData,
+            ),
+          };
+        }
+
+        return combined;
       }
 
-      return await fetchConsumptionFor(minMax || undefined);
+      let result = await fetchConsumptionFor(minMax || undefined);
+      if (normalizedMavsum && isConsumptionPayloadEmpty(result)) {
+        console.log(
+          "[WaterUnifiedWidget] Consumption empty with mavsum, retrying without mavsum...",
+        );
+        result = await fetchConsumptionFor(minMax || undefined, false);
+      }
+      return result;
     } catch (error) {
       if (error.name === "AbortError" || error.message === "AbortError")
         throw new Error("AbortError");
@@ -1382,13 +1427,30 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       } = this.state;
       const { selectedEkinTuri, selectedManbaNomi, selectedKanalNomi } =
         cropFieldFilters;
+      const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
 
-      const fetchSupplyFor = async (minMaxValue?: string) => {
+      const isSupplyPayloadEmpty = (payload: {
+        totalSupply: number;
+        monthlyData: any[];
+      }): boolean => {
+        const total = this.parseMetricValue(payload.totalSupply);
+        if (total > 0) return false;
+        return !(payload.monthlyData || []).some(
+          (item) =>
+            this.parseMetricValue(item?.total_supply_m3) > 0 ||
+            this.parseMetricValue(item?.supply_m3ha) > 0,
+        );
+      };
+
+      const fetchSupplyFor = async (
+        minMaxValue?: string,
+        includeMavsum: boolean = true,
+      ) => {
         const queryParams = new URLSearchParams();
         if (viloyat) queryParams.append("viloyat", viloyat);
         if (tuman) queryParams.append("tuman", tuman);
-        const normalizedMavsum = this.normalizeMavsumForCombinedApi(mavsum);
-        if (normalizedMavsum) queryParams.append("mavsum", normalizedMavsum);
+        if (includeMavsum && normalizedMavsum)
+          queryParams.append("mavsum", normalizedMavsum);
         if (fermer_nomNom) queryParams.append("fermer_nom", fermer_nomNom);
         if (selectedEkinTuri) queryParams.append("ekin_turi", selectedEkinTuri);
         if (selectedManbaNomi)
@@ -1425,12 +1487,12 @@ export default class WaterUnifiedWidget extends React.PureComponent<
       };
 
       if (minMax && String(minMax).toLowerCase() === "both") {
-        const [minData, maxData] = await Promise.all([
+        let [minData, maxData] = await Promise.all([
           fetchSupplyFor("min"),
           fetchSupplyFor("max"),
         ]);
 
-        return {
+        let combined = {
           totalSupply:
             this.parseMetricValue(minData.totalSupply) +
             this.parseMetricValue(maxData.totalSupply),
@@ -1439,9 +1501,37 @@ export default class WaterUnifiedWidget extends React.PureComponent<
             maxData.monthlyData,
           ),
         };
+
+        if (normalizedMavsum && isSupplyPayloadEmpty(combined)) {
+          console.log(
+            "[WaterUnifiedWidget] Supply empty with mavsum, retrying without mavsum...",
+          );
+          [minData, maxData] = await Promise.all([
+            fetchSupplyFor("min", false),
+            fetchSupplyFor("max", false),
+          ]);
+          combined = {
+            totalSupply:
+              this.parseMetricValue(minData.totalSupply) +
+              this.parseMetricValue(maxData.totalSupply),
+            monthlyData: this.sumMonthlySupplyItems(
+              minData.monthlyData,
+              maxData.monthlyData,
+            ),
+          };
+        }
+
+        return combined;
       }
 
-      return await fetchSupplyFor(minMax || undefined);
+      let result = await fetchSupplyFor(minMax || undefined);
+      if (normalizedMavsum && isSupplyPayloadEmpty(result)) {
+        console.log(
+          "[WaterUnifiedWidget] Supply empty with mavsum, retrying without mavsum...",
+        );
+        result = await fetchSupplyFor(minMax || undefined, false);
+      }
+      return result;
     } catch (error) {
       if (error.name === "AbortError" || error.message === "AbortError")
         throw new Error("AbortError");

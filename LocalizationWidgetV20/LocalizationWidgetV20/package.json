@@ -1,0 +1,6 @@
+{
+  "name": "LocalizationWidget",
+  "version": "1.0.0",
+  "main": "dist/runtime/widget.js",
+  "types": "dist/runtime/widget.d.ts"
+}

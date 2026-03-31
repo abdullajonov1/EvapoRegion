@@ -976,50 +976,23 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   }
 
   private async getDistrictOptionsFromApi(viloyat: string): Promise<string[]> {
-    console.log(
-      "[LocalizationWidgetV20] getDistrictOptionsFromApi called for:",
-      viloyat,
-    );
-
     const now = Date.now();
     const cached = this._districtOptionsCache[viloyat];
     if (cached && now - cached.at < 3 * 60 * 1000) {
-      console.log(
-        "[LocalizationWidgetV20] Returning cached districts for",
-        viloyat,
-        ":",
-        cached.opts.length,
-      );
       return [...cached.opts];
     }
 
     for (const domain of ["sgm.uzspace.uz", "apiwater.sgm.uzspace.uz"]) {
       try {
         const url = `https://${domain}/api/v1/location/districts?viloyat=${encodeURIComponent(viloyat)}`;
-        console.log("[LocalizationWidgetV20] Fetching districts from:", domain);
         const res = await fetch(url, {
           headers: { Accept: "application/json" },
         });
-        if (!res.ok) {
-          console.warn(
-            "[LocalizationWidgetV20] District API HTTP error from",
-            domain,
-            ":",
-            res.status,
-          );
-          continue;
-        }
+        if (!res.ok) continue;
         const json = await res.json();
         const districts: string[] = Array.isArray(json?.districts)
           ? json.districts
           : [];
-        console.log(
-          "[LocalizationWidgetV20] Districts from",
-          domain,
-          ":",
-          districts.length,
-          districts,
-        );
         if (districts.length > 0) {
           this._districtOptionsCache = {
             ...this._districtOptionsCache,
@@ -1027,16 +1000,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           };
           return [...districts];
         }
-      } catch (e: any) {
-        console.warn(
-          "[LocalizationWidgetV20] District fetch error from",
-          domain,
-          ":",
-          e?.message,
-        );
-      }
+      } catch {}
     }
-    console.log("[LocalizationWidgetV20] No districts found for", viloyat);
     return [];
   }
 
@@ -1444,9 +1409,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     // If kanal was filtered externally (from EvapoCropV32/EvapoWaterCanalV30),
     // that's usually less important than region filters, so try clearing that first
     if (newFilters.fermer_nom) {
-      console.log(
-        "[LocalizationV20] Clearing fermer_nom due to no data with current filters",
-      );
       newFilters.fermer_nom = "";
 
       // Re-validate after clearing fermer
@@ -1457,9 +1419,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
       if (stillNoData && this.state.filters.tuman) {
         // If still no data, try clearing tuman as well (less common)
-        console.log(
-          "[LocalizationV20] Clearing tuman due to no data with current filters",
-        );
         newFilters.tuman = "";
       }
     }
@@ -1584,9 +1543,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         // (polygon from old viloyat is now outside new viloyat bounds)
         const viloyatChanged = prevViloyat !== validatedNext.viloyat;
         if (viloyatChanged && (this.state.minActive || this.state.maxActive)) {
-          console.log(
-            "[LocalizationV20] Clearing min/max due to viloyat change",
-          );
           this.resetMinMaxState();
         } else if (!this.canUseMinMax()) {
           this.resetMinMaxState();
@@ -1630,9 +1586,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         });
 
       if (!tumanExists) {
-        console.log(
-          "[LocalizationV20] Clearing tuman due to viloyat change - tuman not in new viloyat",
-        );
         result.tuman = "";
         result.fermer_nom = "";
       }
@@ -1646,9 +1599,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         });
 
       if (!farmerExists) {
-        console.log(
-          "[LocalizationV20] Clearing fermer_nom due to tuman change - fermer not in new tuman",
-        );
         result.fermer_nom = "";
       }
     }
@@ -1969,11 +1919,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       }
 
       // Slow path (first call for this layer): obtain the FeatureLayerView and cache it.
-      console.log(
-        "[LocalizationWidgetV20] applyWhereToLayerView: obtaining layer view",
-        { where, layerId: layer.id },
-      );
-
       // Pre-apply server-side expression before the async wait so the layer
       // starts loading only matching features from the outset.
       try {
@@ -1991,12 +1936,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           } catch {}
         }
       }
-      if (!lv) {
-        console.warn(
-          "[LocalizationWidgetV20] applyWhereToLayerView: could not get layer view",
-        );
-        return;
-      }
+      if (!lv) return;
 
       // Cache for all future calls (synchronous fast path).
       this._layerViewMap.set(layer.id, lv);
@@ -2014,13 +1954,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         layer.definitionExpression = where;
       } catch {}
 
-      console.log(
-        "[LocalizationWidgetV20] applyWhereToLayerView: filter applied",
-        { where },
-      );
-    } catch (err) {
-      console.warn("applyWhereToLayerView failed", err);
-    }
+    } catch {}
   };
 
   private zoomToFilteredExtent = async (
@@ -2039,12 +1973,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       try {
         const res = await layer.queryExtent(q);
         extent = res?.extent || null;
-      } catch (extentErr) {
-        console.warn(
-          "[LocalizationWidgetV20] layer.queryExtent failed",
-          extentErr,
-        );
-      }
+      } catch {}
 
       if (!extent) {
         try {
@@ -2056,13 +1985,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         } catch {}
       }
 
-      if (!extent) {
-        console.warn("[LocalizationWidgetV20] No extent found for zoom", {
-          layerId: layer.id,
-          where,
-        });
-        return;
-      }
+      if (!extent) return;
 
       // Guard against invalid extents (0,0,0,0 or world bounds)
       const xmin = Number(extent.xmin || 0);
@@ -2079,16 +2002,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         Math.abs(xmax - xmin) > 0.001 &&
         Math.abs(ymax - ymin) > 0.001;
 
-      if (!isValid) {
-        console.warn("[Map] Extent invalid or empty", {
-          xmin,
-          ymin,
-          xmax,
-          ymax,
-          where,
-        });
-        return;
-      }
+      if (!isValid) return;
 
       const target =
         typeof extent.expand === "function" ? extent.expand(1.05) : extent;
@@ -2100,22 +2014,13 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
   /* ── Main map filter orchestrator (mirrors Evapo-RegionV31 applyMapFiltersOptimized) ── */
   private applyMapFilters = async (): Promise<void> => {
-    if (!this._isMounted) {
-      console.log(
-        "[LocalizationWidgetV20] applyMapFilters: not mounted, skipping",
-      );
-      return;
-    }
-    console.log("[LocalizationWidgetV20] applyMapFilters: starting");
+    if (!this._isMounted) return;
     let allLayers = Object.values(this._dsLayerMap) as any[];
     if (allLayers.length === 0 && this._jimuMapView) {
       await this.initializeMapConnection(this._jimuMapView);
       allLayers = Object.values(this._dsLayerMap) as any[];
     }
-    if (allLayers.length === 0) {
-      console.log("[LocalizationWidgetV20] applyMapFilters: no layers found");
-      return;
-    }
+    if (allLayers.length === 0) return;
 
     const {
       filters,
@@ -2138,7 +2043,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     // 🔒 HARD BLOCK #1: no year → hide all + 1=0
     if (!hasYil) {
-      console.log("[LocalizationWidgetV20] HARD BLOCK #1: no year selected");
       hideAll();
       await Promise.all(
         allLayers.map((l) => this.applyWhereToLayerView(l, "1=0")),
@@ -2150,7 +2054,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     // 🔒 HARD BLOCK #2: no viloyat → hide all + 1=0
     if (!hasViloyat) {
-      console.log("[LocalizationWidgetV20] HARD BLOCK #2: no viloyat selected");
       hideAll();
       await Promise.all(
         allLayers.map((l) => this.applyWhereToLayerView(l, "1=0")),
@@ -2161,11 +2064,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
 
     // Both yil + viloyat selected → build WHERE and show active layer
-    console.log("[LocalizationWidgetV20] Building WHERE clause with filters:", {
-      viloyat: filters.viloyat,
-      tuman: filters.tuman,
-      yil: filters.yil,
-    });
     const internalWhere = this.regionFilterEngine.buildWhereClause(filters);
     const whereParts = [
       internalWhere,
@@ -2175,17 +2073,35 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       externalPolygonFilter,
     ].filter(Boolean);
     const where = whereParts.length ? whereParts.join(" AND ") : "1=1";
-    console.log("[LocalizationWidgetV20] Final WHERE clause:", {
-      where,
-      numParts: whereParts.length,
-    });
 
     // Determine active layer
     let activeLayer: any = null;
     if (isYearLayer && filters.yil) {
-      const yearToDsId = this.regionFilterEngine.getYearToDsId();
-      const dsId = yearToDsId[filters.yil] || "";
-      activeLayer = dsId ? this._dsLayerMap[dsId] : allLayers[0];
+      const candidateDsIds = await this.regionFilterEngine.getDsIdsMatchingYear(
+        filters.yil,
+      );
+      const candidateLayers = candidateDsIds
+        .map((id) => this._dsLayerMap[id])
+        .filter(Boolean);
+
+      if (candidateLayers.length > 1 && filters.viloyat) {
+        const regionWhere = this.regionFilterEngine.buildWhereClause(filters);
+        for (const layer of candidateLayers) {
+          try {
+            const q = layer.createQuery ? layer.createQuery() : ({} as any);
+            q.where = regionWhere;
+            const count = Number((await layer.queryFeatureCount(q)) || 0);
+            if (count > 0) {
+              activeLayer = layer;
+              break;
+            }
+          } catch {}
+        }
+      }
+
+      if (!activeLayer) {
+        activeLayer = candidateLayers[0] || allLayers[0];
+      }
     } else {
       activeLayer = allLayers[0];
     }
@@ -2208,11 +2124,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     // Determine targets (year-layer: only active, single-DS: active)
     const targets = activeLayer ? [activeLayer] : allLayers;
-    console.log("[LocalizationWidgetV20] Applying where clause to layers:", {
-      where,
-      numTargets: targets.length,
-      layerIds: targets.map((l: any) => l.id),
-    });
     await Promise.all(targets.map((l) => this.applyWhereToLayerView(l, where)));
 
     // Also apply WHERE to extra feature layers in the map that have viloyat field.
@@ -2221,11 +2132,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     await this.syncExtraMapLayers(allLayers, where, activeLayer);
 
     const shouldZoom = this._prevDefinitionExpression !== where;
-    console.log("[LocalizationWidgetV20] Zoom decision:", {
-      shouldZoom,
-      prevWhere: this._prevDefinitionExpression,
-      newWhere: where,
-    });
     if (shouldZoom) {
       // Zoom to fallback layer if one was activated, otherwise DS active layer
       let zoomLayer = this._fallbackLayerId
@@ -2291,11 +2197,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
                     const mc = Number((await ml.queryFeatureCount(mq)) || 0);
                     if (mc > 0) {
                       zoomLayer = ml;
-                      console.log(
-                        "[LocalizationWidgetV20] Zoom target switched to layer with data:",
-                        ml.id,
-                        { baseRegionWhere, count: mc },
-                      );
                       break;
                     }
                   } catch {}
@@ -2303,22 +2204,10 @@ export default class LanguageSelectorV20 extends React.PureComponent<
               } catch {}
             }
 
-            console.log(
-              "[LocalizationWidgetV20] Strict WHERE has 0 features, zooming with base region WHERE",
-              { baseRegionWhere },
-            );
           }
         }
-        console.log("[LocalizationWidgetV20] Zooming to filtered extent...", {
-          layerId: zoomLayer.id,
-          isFallback: !!this._fallbackLayerId,
-        });
         await this.zoomToFilteredExtent(zoomLayer, effectiveZoomWhere);
       }
-    } else {
-      console.log(
-        "[LocalizationWidgetV20] WHERE clause unchanged, skipping zoom",
-      );
     }
 
     this._prevDefinitionExpression = where;
@@ -2425,10 +2314,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           q.where = where;
           const count = Number((await activeLayer.queryFeatureCount(q)) || 0);
           dsHasFeatures = count > 0;
-          console.log(
-            "[LocalizationWidgetV20] DS active layer feature count:",
-            { layerId: activeLayer.id, where, count },
-          );
         } catch {}
       }
 
@@ -2529,12 +2414,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         }
       } catch {}
 
-      console.log(
-        "[LocalizationWidgetV20] Fallback layer activated:",
-        newFallbackLayer.id,
-        isSameLayer ? "(filter updated in-place)" : "(new fallback)",
-      );
-
       // Step 4: NOW clear the previous fallback (different layer) — the new
       // fallback is already showing filtered data, so this is visually seamless.
       if (
@@ -2563,9 +2442,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           }
         }
       }
-    } catch (err) {
-      console.warn("[LocalizationWidgetV20] syncExtraMapLayers error:", err);
-    }
+    } catch {}
   };
 
   private applyCropRenderer = (): void => {
@@ -2644,10 +2521,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     filters: LocalFilterState = this.state.filters,
   ): Promise<void> => {
     const reqId = ++this.regionFilterReqId;
-    console.log(
-      "[LocalizationWidgetV20] Starting refreshRegionFilterOptions:",
-      { reqId, viloyat: filters.viloyat, yil: filters.yil },
-    );
     if (this._isMounted) this.setState({ regionFilterLoading: true });
 
     const engine = this.regionFilterEngine;
@@ -2720,15 +2593,15 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       }
 
       await Promise.all(parallelLoads);
+      const layerBasedViloyatOptions = [...regionOptions];
+      console.log("[LocalizationWidgetV20] Region options snapshot", {
+        selectedYil: filters.yil || "",
+        availableYilsFromAllLayers: yearOptions,
+        availableViloyatsAfterSelectedYil: layerBasedViloyatOptions,
+      });
 
       // Merge API-sourced options: regions from directory + districts from location API
       // Run in parallel to avoid sequential delays.
-      console.log("[LocalizationWidgetV20] Loading API options for merge...", {
-        viloyat: filters.viloyat,
-        regionOpts_before: regionOptions.length,
-        districtOpts_before: districtOptions.length,
-      });
-
       const [directoryRegionOptions, apiDistrictOptions] = await Promise.all([
         this.getDirectoryRegionOptions(),
         filters.viloyat
@@ -2736,32 +2609,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           : Promise.resolve([] as string[]),
       ]);
 
-      console.log("[LocalizationWidgetV20] API options loaded:", {
-        directoryRegionOptions: directoryRegionOptions.length,
-        apiDistrictOptions: apiDistrictOptions.length,
-      });
-
       regionOptions = this.mergeUniqueByNormalizedKey(
         regionOptions,
         directoryRegionOptions,
         (value) => this.normalizeRegionLookupKey(value),
       );
       if (apiDistrictOptions.length > 0) {
-        console.log(
-          "[LocalizationWidgetV20] Merging API districts for",
-          filters.viloyat,
-          ":",
-          apiDistrictOptions,
-        );
         districtOptions = this.mergeUniqueByNormalizedKey(
           districtOptions,
           apiDistrictOptions,
         );
       }
-      console.log("[LocalizationWidgetV20] After merge:", {
-        regionOpts: regionOptions.length,
-        districtOpts: districtOptions.length,
-      });
     }
 
     if (!this._isMounted || reqId !== this.regionFilterReqId) return;

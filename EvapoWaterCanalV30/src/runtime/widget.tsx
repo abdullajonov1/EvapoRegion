@@ -1037,7 +1037,7 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       normalized.includes("ikkilamchi") ||
       normalized.includes("иккиламчи") ||
       normalized.includes("вторич");
-    if (isIkkilamchi) return " Ikkilamchi";
+    if (isIkkilamchi) return "Ikkilamchi";
 
     const isBirlamchi =
       normalized.includes("birlamchi") ||
@@ -1618,33 +1618,59 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       const { viloyat, tuman, mavsum, ekinTuri, fermerNom, minMax, yil } =
         this.state;
       const normalizedMavsum = this.normalizeMavsumForApi(mavsum);
-      const params = new URLSearchParams();
-      if (viloyat) params.append("viloyat", viloyat);
-      if (tuman) params.append("tuman", tuman);
-      if (normalizedMavsum) params.append("mavsum", normalizedMavsum);
-      if (ekinTuri) params.append("ekin_turi", ekinTuri);
-      if (fermerNom) params.append("fermer_nom", fermerNom);
-      if (minMax && String(minMax).toLowerCase() !== "both")
-        params.append("min_max", minMax);
-      if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
+      const fetchSourcesFor = async (
+        includeTuman: boolean = true,
+        includeMavsum: boolean = true,
+      ) => {
+        const params = new URLSearchParams();
+        if (viloyat) params.append("viloyat", viloyat);
+        if (includeTuman && tuman) params.append("tuman", tuman);
+        if (includeMavsum && normalizedMavsum)
+          params.append("mavsum", normalizedMavsum);
+        if (ekinTuri) params.append("ekin_turi", ekinTuri);
+        if (fermerNom) params.append("fermer_nom", fermerNom);
+        if (minMax && String(minMax).toLowerCase() !== "both")
+          params.append("min_max", minMax);
+        if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
 
-      const url = `https://sgm.uzspace.uz/api/v1/water/sources?${params.toString()}`;
-      const resp = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        signal,
-      });
-      if (signal.aborted) return;
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (signal.aborted) return;
+        const url = `https://sgm.uzspace.uz/api/v1/water/sources?${params.toString()}`;
+        const resp = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          signal,
+        });
+        if (signal.aborted) return [] as WaterSource[];
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (signal.aborted) return [] as WaterSource[];
+        return (data.water_sources || []).filter(
+          (s: any) => s.manba_nomi?.trim() && s.total_supply_m3 > 0,
+        ) as WaterSource[];
+      };
 
-      let sources: WaterSource[] = (data.water_sources || []).filter(
-        (s: any) => s.manba_nomi?.trim() && s.total_supply_m3 > 0,
-      );
+      let sources: WaterSource[] = await fetchSourcesFor(true, true);
+      if (sources.length === 0 && normalizedMavsum) {
+        console.log(
+          "[EvapoWaterCanalV20] Sources empty with mavsum, retrying without mavsum...",
+        );
+        sources = await fetchSourcesFor(true, false);
+      }
+      if (sources.length === 0 && tuman) {
+        console.log(
+          "[EvapoWaterCanalV20] Sources empty with tuman, retrying without tuman...",
+        );
+        sources = await fetchSourcesFor(false, true);
+      }
+      if (sources.length === 0 && tuman && normalizedMavsum) {
+        console.log(
+          "[EvapoWaterCanalV20] Sources still empty, retrying without tuman+mavsum...",
+        );
+        sources = await fetchSourcesFor(false, false);
+      }
+
       const totalSupply = sources.reduce(
         (sum, s) => sum + s.total_supply_m3,
         0,
@@ -1746,35 +1772,61 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
       } = this.state;
 
       const normalizedMavsum = this.normalizeMavsumForApi(mavsum);
+      const fetchCanalsFor = async (
+        includeTuman: boolean = true,
+        includeMavsum: boolean = true,
+      ) => {
+        const params = new URLSearchParams();
+        if (viloyat) params.append("viloyat", viloyat);
+        if (includeTuman && tuman) params.append("tuman", tuman);
+        if (includeMavsum && normalizedMavsum)
+          params.append("mavsum", normalizedMavsum);
+        if (ekinTuri) params.append("ekin_turi", ekinTuri);
+        if (fermerNom) params.append("fermer_nom", fermerNom);
+        if (selectedWaterSource)
+          params.append("manba_nomi", selectedWaterSource);
+        if (minMax && String(minMax).toLowerCase() !== "both")
+          params.append("min_max", minMax);
+        if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
 
-      const params = new URLSearchParams();
-      if (viloyat) params.append("viloyat", viloyat);
-      if (tuman) params.append("tuman", tuman);
-      if (normalizedMavsum) params.append("mavsum", normalizedMavsum);
-      if (ekinTuri) params.append("ekin_turi", ekinTuri);
-      if (fermerNom) params.append("fermer_nom", fermerNom);
-      if (selectedWaterSource) params.append("manba_nomi", selectedWaterSource);
-      if (minMax && String(minMax).toLowerCase() !== "both")
-        params.append("min_max", minMax);
-      if (yil && /^\d{4}$/.test(yil)) params.append("yil", yil);
+        const url = `https://sgm.uzspace.uz/api/v1/water/canals?${params.toString()}`;
+        const resp = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          signal,
+        });
+        if (signal.aborted) return [] as Canal[];
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (signal.aborted) return [] as Canal[];
+        return (data?.canals ?? []).filter(
+          (c: any) => c?.kanal_nomi?.trim() && Number(c.total_supply_m3) > 0,
+        ) as Canal[];
+      };
 
-      const url = `https://sgm.uzspace.uz/api/v1/water/canals?${params.toString()}`;
-      const resp = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        signal,
-      });
-      if (signal.aborted) return;
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (signal.aborted) return;
+      let canals: Canal[] = await fetchCanalsFor(true, true);
+      if (canals.length === 0 && normalizedMavsum) {
+        console.log(
+          "[EvapoWaterCanalV20] Canals empty with mavsum, retrying without mavsum...",
+        );
+        canals = await fetchCanalsFor(true, false);
+      }
+      if (canals.length === 0 && tuman) {
+        console.log(
+          "[EvapoWaterCanalV20] Canals empty with tuman, retrying without tuman...",
+        );
+        canals = await fetchCanalsFor(false, true);
+      }
+      if (canals.length === 0 && tuman && normalizedMavsum) {
+        console.log(
+          "[EvapoWaterCanalV20] Canals still empty, retrying without tuman+mavsum...",
+        );
+        canals = await fetchCanalsFor(false, false);
+      }
 
-      let canals: Canal[] = (data?.canals ?? []).filter(
-        (c: any) => c?.kanal_nomi?.trim() && Number(c.total_supply_m3) > 0,
-      );
       const totalVolume = canals.reduce(
         (sum, c) => sum + Number(c.total_supply_m3 || 0),
         0,

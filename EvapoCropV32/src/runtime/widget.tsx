@@ -2035,7 +2035,7 @@ export default class CropDistributionWidget extends React.PureComponent<
       if (yil && /^\d{4}$/.test(yil)) queryParams.append("yil", yil);
 
       try {
-        const data = await this.fetchCropDistributionData(
+        let data = await this.fetchCropDistributionData(
           queryParams.toString(),
           {
             viloyat,
@@ -2051,7 +2051,55 @@ export default class CropDistributionWidget extends React.PureComponent<
         );
         if (signal.aborted) return;
 
-        const rawCrops = data.crop_distribution || [];
+        let rawCrops = data.crop_distribution || [];
+
+        const retryCropFetch = async (
+          opts: { dropTuman?: boolean; dropMavsum?: boolean },
+          reason: string,
+        ) => {
+          const retryParams = new URLSearchParams(queryParams.toString());
+          if (opts.dropTuman) retryParams.delete("tuman");
+          if (opts.dropMavsum) retryParams.delete("mavsum");
+
+          console.log(`[EvapoCropV32] ${reason}`);
+          data = await this.fetchCropDistributionData(
+            retryParams.toString(),
+            {
+              viloyat,
+              tuman: opts.dropTuman ? "" : tuman,
+              mavsum: opts.dropMavsum ? "" : mavsum,
+              fermer_nom,
+              waterSource,
+              canalName: resolvedCanalName,
+              minMax,
+              yil,
+            },
+            signal,
+          );
+          if (signal.aborted) return;
+          rawCrops = data.crop_distribution || [];
+        };
+
+        if (rawCrops.length === 0 && tuman) {
+          await retryCropFetch(
+            { dropTuman: true },
+            "Empty crop distribution with tuman, retrying without tuman...",
+          );
+        }
+
+        if (rawCrops.length === 0 && mavsum) {
+          await retryCropFetch(
+            { dropMavsum: true },
+            "Empty crop distribution with mavsum, retrying without mavsum...",
+          );
+        }
+
+        if (rawCrops.length === 0 && tuman && mavsum) {
+          await retryCropFetch(
+            { dropTuman: true, dropMavsum: true },
+            "Empty crop distribution with tuman+mavsum, retrying without both...",
+          );
+        }
 
         // Names that are not actual crop types — exclude from the card list.
         const NON_CROP_NAMES = new Set(
