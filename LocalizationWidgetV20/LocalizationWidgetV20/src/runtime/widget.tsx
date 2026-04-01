@@ -475,6 +475,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   /** Cached FeatureLayerView instances keyed by layer.id — allows synchronous lv.filter updates. */
   private _layerViewMap: Map<string, any> = new Map();
   private _prevDefinitionExpression = "";
+  private _mapFilterRunId = 0;
   private _fallbackLayerId: string | null = null;
   private _fallbackOriginalDefExpr: string | null = null;
   private _fallbackOriginalMinScale: number | null = null;
@@ -1501,6 +1502,10 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
   };
 
+  private isStaleMapFilterRun = (runId: number): boolean => {
+    return !this._isMounted || runId !== this._mapFilterRunId;
+  };
+
   private getFilterSignature = (f: LocalFilterState): string => {
     return `${f.yil}||${f.viloyat}||${f.tuman}||${f.mavsum}||${f.fermer_nom}`;
   };
@@ -1953,16 +1958,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       try {
         layer.definitionExpression = where;
       } catch {}
-
     } catch {}
   };
 
   private zoomToFilteredExtent = async (
     layer: any,
     where: string,
+    runId?: number,
   ): Promise<void> => {
     if (!this._jimuMapView?.view || !layer || !where || where === "1=0") return;
     try {
+      if (typeof runId === "number" && this.isStaleMapFilterRun(runId)) return;
       const view: any = this._jimuMapView.view;
       const q = layer.createQuery ? layer.createQuery() : { where };
       q.where = where;
@@ -1975,6 +1981,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         extent = res?.extent || null;
       } catch {}
 
+      if (typeof runId === "number" && this.isStaleMapFilterRun(runId)) return;
+
       if (!extent) {
         try {
           const lv = await view.whenLayerView(layer);
@@ -1984,6 +1992,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           }
         } catch {}
       }
+
+      if (typeof runId === "number" && this.isStaleMapFilterRun(runId)) return;
 
       if (!extent) return;
 
@@ -2006,6 +2016,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
       const target =
         typeof extent.expand === "function" ? extent.expand(1.05) : extent;
+      if (typeof runId === "number" && this.isStaleMapFilterRun(runId)) return;
       await view.goTo(target, { duration: 700 });
     } catch {
       // no-op: filtering should continue even if zoom fails
@@ -2015,9 +2026,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   /* ── Main map filter orchestrator (mirrors Evapo-RegionV31 applyMapFiltersOptimized) ── */
   private applyMapFilters = async (): Promise<void> => {
     if (!this._isMounted) return;
+    const runId = ++this._mapFilterRunId;
     let allLayers = Object.values(this._dsLayerMap) as any[];
     if (allLayers.length === 0 && this._jimuMapView) {
       await this.initializeMapConnection(this._jimuMapView);
+      if (this.isStaleMapFilterRun(runId)) return;
       allLayers = Object.values(this._dsLayerMap) as any[];
     }
     if (allLayers.length === 0) return;
@@ -2048,6 +2061,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         allLayers.map((l) => this.applyWhereToLayerView(l, "1=0")),
       );
       await this.clearFallbackLayer();
+      if (this.isStaleMapFilterRun(runId)) return;
       this._prevDefinitionExpression = "1=0";
       return;
     }
@@ -2059,6 +2073,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         allLayers.map((l) => this.applyWhereToLayerView(l, "1=0")),
       );
       await this.clearFallbackLayer();
+      if (this.isStaleMapFilterRun(runId)) return;
       this._prevDefinitionExpression = "1=0";
       return;
     }
@@ -2106,6 +2121,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       activeLayer = allLayers[0];
     }
 
+    if (this.isStaleMapFilterRun(runId)) return;
+
     // Pre-filter the active layer BEFORE making it visible so it loads with the
     // correct definitionExpression from the first render frame — prevents flash of
     // unfiltered features while the async lv.filter is being applied.
@@ -2125,11 +2142,13 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     // Determine targets (year-layer: only active, single-DS: active)
     const targets = activeLayer ? [activeLayer] : allLayers;
     await Promise.all(targets.map((l) => this.applyWhereToLayerView(l, where)));
+    if (this.isStaleMapFilterRun(runId)) return;
 
     // Also apply WHERE to extra feature layers in the map that have viloyat field.
     // If the DS active layer has 0 features for the region, activate a fallback layer
     // that DOES have matching features (e.g. the field polygon layer).
     await this.syncExtraMapLayers(allLayers, where, activeLayer);
+    if (this.isStaleMapFilterRun(runId)) return;
 
     const shouldZoom = this._prevDefinitionExpression !== where;
     if (shouldZoom) {
@@ -2203,13 +2222,14 @@ export default class LanguageSelectorV20 extends React.PureComponent<
                 }
               } catch {}
             }
-
           }
         }
-        await this.zoomToFilteredExtent(zoomLayer, effectiveZoomWhere);
+        if (this.isStaleMapFilterRun(runId)) return;
+        await this.zoomToFilteredExtent(zoomLayer, effectiveZoomWhere, runId);
       }
     }
 
+    if (this.isStaleMapFilterRun(runId)) return;
     this._prevDefinitionExpression = where;
   };
 
@@ -2783,7 +2803,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       this.updateFilter(nextPartial, (nextFilters) => {
         this.setState({ openRegionFilterMenuKey: null, farmerSearchText: "" });
         void this.refreshRegionFilterOptions(nextFilters);
-        void this.applyMapFilters();
       });
     }
   };
@@ -2862,7 +2881,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     this.resetExternalFilters("viloyatChanged", () => {
       this.updateFilter(nextPartial, (nextFilters) => {
         void this.refreshRegionFilterOptions(nextFilters);
-        void this.applyMapFilters();
       });
     });
   };
@@ -2886,7 +2904,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     this.resetExternalFilters("tumanChanged", () => {
       this.updateFilter(nextPartial, (nextFilters) => {
         void this.refreshRegionFilterOptions(nextFilters);
-        void this.applyMapFilters();
       });
     });
   };
@@ -2908,7 +2925,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     this.resetExternalFilters("fermerChanged", () => {
       this.updateFilter(nextPartial, (nextFilters) => {
         void this.refreshRegionFilterOptions(nextFilters);
-        void this.applyMapFilters();
       });
     });
   };

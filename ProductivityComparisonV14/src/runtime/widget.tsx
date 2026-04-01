@@ -642,6 +642,8 @@ export default class YieldWaterChartWidget extends React.PureComponent<
 
   /** ✅ Store Recharts pixel coordinates for each bin (updated during render) */
   private _binPixelCoords = new Map<string, { x: number; y: number }>();
+  private _applySelectionReqId = 0;
+  private _applySelectionInFlightSignature = "";
 
   constructor(props: AllWidgetProps<any>) {
     super(props);
@@ -2437,6 +2439,24 @@ export default class YieldWaterChartWidget extends React.PureComponent<
         focusedGlobalId: coreId,
       });
     }
+  };
+
+  private restoreSelectedBinPolygons = async (): Promise<void> => {
+    const ids = Array.from(
+      new Set(
+        (this.state.rawPoints || [])
+          .map((p) => this.normalizeGuid(this.getRawPointGlobalId(p)))
+          .filter(Boolean),
+      ),
+    );
+
+    if (!ids.length) {
+      this.clearMapSelection();
+      this.setState({ mapSelectedCount: 0, mapError: null });
+      return;
+    }
+
+    await this.applySelectionToMap(ids, this.state.selectedYil);
   };
 
   private getActiveYear = (yearOverride?: string): string => {
@@ -4473,196 +4493,226 @@ export default class YieldWaterChartWidget extends React.PureComponent<
     return first ? String(first) : null;
   };
 
+  private isStaleApplySelectionRun = (runId: number): boolean => {
+    return !this._isMounted || runId !== this._applySelectionReqId;
+  };
+
   private applySelectionToMap = async (
     globalids: string[],
     year?: string,
   ): Promise<void> => {
     if (!this._isMounted) return;
-
-    const jmv = this.state.jimuMapView;
-    const view = jmv?.view as __esri.MapView | __esri.SceneView | undefined;
-    if (!view?.map) {
-      this.setState({
-        mapError: "No connected Map widget / view yet.",
-        mapSelectedCount: 0,
-      });
-      return;
-    }
-
-    const y = String(year ?? this.state.selectedYil ?? "").trim();
-
-    const layer = await this.ensurePolygonLayerInMapAfterLasso(y);
-    if (!layer) {
-      console.warn("[applySelectionToMap] No polygon layer found/created", {
-        year: y,
-        viloyat: this.state.selectedViloyat,
-        useDsSources: this.toPlainArray(this.props.useDataSources)?.length ?? 0,
-      });
-      this.setState({
-        mapError:
-          "Could not create/find the polygon FeatureLayer for the selected year. " +
-          "Make sure widget settings use real FeatureLayer data sources (one per year).",
-        mapSelectedCount: 0,
-      });
-      return;
-    }
-
-    try {
-      await layer.load();
-    } catch {}
-
-    console.log("[applySelectionToMap] Layer resolved:", {
-      url: (layer as any)?.url,
-      id: layer.id,
-      fields: layer.fields?.map((f) => f.name)?.slice(0, 15),
-      geometryType: (layer as any)?.geometryType,
-      idsCount: globalids?.length,
-      viloyat: this.state.selectedViloyat,
-    });
-
-    // IMPORTANT: your layer stores strings like "{GUID}" (see screenshot),
-    // so we must match BOTH formats regardless of field type.
+    const runId = ++this._applySelectionReqId;
+    const rawIds = Array.isArray(globalids) ? globalids : [];
     const coreIds = [
       ...new Set(
-        (globalids || [])
-          .map((g) => this.normalizeGuid(String(g || "")))
-          .filter(Boolean),
+        rawIds.map((g) => this.normalizeGuid(String(g || ""))).filter(Boolean),
       ),
     ];
+    const y = String(year ?? this.state.selectedYil ?? "").trim();
+    const signature = `${y}::${coreIds.slice().sort().join(",")}`;
 
-    if (!coreIds.length) {
-      this.clearMapSelection();
+    if (signature && signature === this._applySelectionInFlightSignature) {
       return;
     }
 
-    const idFieldRaw = await this.resolveBestIdFieldForSourceIds(
-      layer,
-      coreIds,
-    );
-    const idField =
-      this.resolveFieldName(layer, idFieldRaw) ||
-      this.resolveFieldName(layer, "globalid") ||
-      idFieldRaw;
+    this._applySelectionInFlightSignature = signature;
 
-    const values = [...new Set(coreIds.flatMap((g) => this.guidVariants(g)))]; // => [guid, {guid}]
-    const idWhere = this.buildWhereForIds(idField, values, 200);
-    const contextWhere = this.buildContextFilterWhere(layer);
-    const whereWithCtx = this.combineWhereClauses(idWhere, contextWhere);
-    const candidates = this.getIdFieldCandidates(layer);
-    console.log(
-      `[applySelectionToMap] idField=${idField} globalIdField=${(layer as any)?.globalIdField ?? "null"} ` +
-        `layerFields=${layer.fields?.map((f) => f.name).join(",") || "(none)"} ` +
-        `candidates=${candidates.slice(0, 6).join(",")} sampleId=${coreIds[0] ?? "n/a"}`,
-    );
-
-    // Clear selection graphics
     try {
-      const gl = view.map.findLayerById(
-        SELECTION_LAYER_ID,
-      ) as __esri.GraphicsLayer;
-      if (gl) gl.removeAll();
-    } catch {}
-
-    let matched = 0;
-    let where = whereWithCtx;
-    try {
-      // IMPORTANT: Use withDefinitionExpressionDisabled — newly-created layers
-      // start with definitionExpression="1=0" which would block all queries.
-      matched = await this.withDefinitionExpressionDisabled(layer, async () =>
-        Number((await layer.queryFeatureCount({ where } as any)) ?? 0),
-      );
-      console.log("[applySelectionToMap] Query result:", {
-        where: where.length > 300 ? where.slice(0, 300) + "..." : where,
-        idField,
-        matched,
-        sampleIds: coreIds.slice(0, 3),
-        contextWhere: contextWhere || "(none)",
-        layerDefExpr: (layer as any)?.definitionExpression ?? "(none)",
-        globalIdField: (layer as any)?.globalIdField ?? "(none)",
-      });
-      console.log(
-        `[applySelectionToMap] matched=${matched} idField=${idField} contextWhere=${contextWhere ? contextWhere.slice(0, 60) + "..." : "(none)"}`,
-      );
-
-      // If context filter gives 0, retry with ID-only WHERE
-      if (matched <= 0 && contextWhere) {
-        const idOnlyCount = await this.withDefinitionExpressionDisabled(
-          layer,
-          async () =>
-            Number(
-              (await layer.queryFeatureCount({ where: idWhere } as any)) ?? 0,
-            ),
-        );
-        console.log(
-          `[applySelectionToMap] Retry idOnly: idOnlyCount=${idOnlyCount} field=${idField} sampleWhere=${idWhere.slice(0, 80)}`,
-        );
-        if (idOnlyCount > 0) {
-          matched = idOnlyCount;
-          where = idWhere;
+      const jmv = this.state.jimuMapView;
+      const view = jmv?.view as __esri.MapView | __esri.SceneView | undefined;
+      if (!view?.map) {
+        if (!this.isStaleApplySelectionRun(runId)) {
+          this.setState({
+            mapError: "No connected Map widget / view yet.",
+            mapSelectedCount: 0,
+          });
         }
+        return;
       }
 
-      if (matched <= 0) {
-        const binRangeWhere = this.buildSelectedBinMetricWhere(layer);
-        if (binRangeWhere) {
-          const rangeCount = await this.withDefinitionExpressionDisabled(
-            layer,
-            async () =>
-              Number(
-                (await layer.queryFeatureCount({
-                  where: binRangeWhere,
-                } as any)) ?? 0,
-              ),
-          );
-          console.log(
-            `[applySelectionToMap] Retry binRange: rangeCount=${rangeCount} sampleWhere=${binRangeWhere.slice(0, 120)}`,
-          );
-          if (rangeCount > 0) {
-            matched = rangeCount;
-            where = binRangeWhere;
-          }
-        }
+      if (!coreIds.length) {
+        this.clearMapSelection();
+        return;
       }
 
-      if (matched <= 0) {
-        layer.definitionExpression = "1=0";
-        layer.visible = false;
+      const layer = await this.ensurePolygonLayerInMapAfterLasso(y);
+      if (this.isStaleApplySelectionRun(runId)) return;
+      if (!layer) {
+        console.warn("[applySelectionToMap] No polygon layer found/created", {
+          year: y,
+          viloyat: this.state.selectedViloyat,
+          useDsSources:
+            this.toPlainArray(this.props.useDataSources)?.length ?? 0,
+        });
         this.setState({
-          activePolygonLayerId: layer.id,
-          mapError: "Tanlangan bin uchun polygon topilmadi. ID mos kelmadi.",
+          mapError:
+            "Could not create/find the polygon FeatureLayer for the selected year. " +
+            "Make sure widget settings use real FeatureLayer data sources (one per year).",
           mapSelectedCount: 0,
         });
         return;
       }
 
-      layer.definitionExpression = where;
-      layer.visible = true;
+      try {
+        await layer.load();
+      } catch {}
+      if (this.isStaleApplySelectionRun(runId)) return;
 
-      await this.renderSelectionOverlay(layer, where, matched);
-
-      // Save active layer ID so we can hide it later
-      this.setState({ activePolygonLayerId: layer.id, mapError: null });
-    } catch (e: any) {
-      this.setState({
-        mapError: `Failed to apply filter: ${e?.message ?? e}`,
-        mapSelectedCount: 0,
+      console.log("[applySelectionToMap] Layer resolved:", {
+        url: (layer as any)?.url,
+        id: layer.id,
+        fields: layer.fields?.map((f) => f.name)?.slice(0, 15),
+        geometryType: (layer as any)?.geometryType,
+        idsCount: globalids?.length,
+        viloyat: this.state.selectedViloyat,
       });
-      return;
-    }
 
-    if (!this._isMounted) return;
-    this.setState({ mapSelectedCount: matched, mapError: null });
+      // IMPORTANT: your layer stores strings like "{GUID}" (see screenshot),
+      // so we must match BOTH formats regardless of field type.
 
-    try {
-      const ext = await (layer as any).queryExtent({ where });
-      const extent = ext?.extent;
-      if (extent && (view as any).goTo) {
-        await (view as any).goTo(extent.expand ? extent.expand(1.3) : extent, {
-          duration: 300,
+      const idFieldRaw = await this.resolveBestIdFieldForSourceIds(
+        layer,
+        coreIds,
+      );
+      if (this.isStaleApplySelectionRun(runId)) return;
+      const idField =
+        this.resolveFieldName(layer, idFieldRaw) ||
+        this.resolveFieldName(layer, "globalid") ||
+        idFieldRaw;
+
+      const values = [...new Set(coreIds.flatMap((g) => this.guidVariants(g)))]; // => [guid, {guid}]
+      const idWhere = this.buildWhereForIds(idField, values, 200);
+      const contextWhere = this.buildContextFilterWhere(layer);
+      const whereWithCtx = this.combineWhereClauses(idWhere, contextWhere);
+      const candidates = this.getIdFieldCandidates(layer);
+      console.log(
+        `[applySelectionToMap] idField=${idField} globalIdField=${(layer as any)?.globalIdField ?? "null"} ` +
+          `layerFields=${layer.fields?.map((f) => f.name).join(",") || "(none)"} ` +
+          `candidates=${candidates.slice(0, 6).join(",")} sampleId=${coreIds[0] ?? "n/a"}`,
+      );
+
+      // Clear selection graphics
+      try {
+        const gl = view.map.findLayerById(
+          SELECTION_LAYER_ID,
+        ) as __esri.GraphicsLayer;
+        if (gl) gl.removeAll();
+      } catch {}
+
+      let matched = 0;
+      let where = whereWithCtx;
+      try {
+        // IMPORTANT: Use withDefinitionExpressionDisabled — newly-created layers
+        // start with definitionExpression="1=0" which would block all queries.
+        matched = await this.withDefinitionExpressionDisabled(layer, async () =>
+          Number((await layer.queryFeatureCount({ where } as any)) ?? 0),
+        );
+        console.log("[applySelectionToMap] Query result:", {
+          where: where.length > 300 ? where.slice(0, 300) + "..." : where,
+          idField,
+          matched,
+          sampleIds: coreIds.slice(0, 3),
+          contextWhere: contextWhere || "(none)",
+          layerDefExpr: (layer as any)?.definitionExpression ?? "(none)",
+          globalIdField: (layer as any)?.globalIdField ?? "(none)",
         });
+        console.log(
+          `[applySelectionToMap] matched=${matched} idField=${idField} contextWhere=${contextWhere ? contextWhere.slice(0, 60) + "..." : "(none)"}`,
+        );
+
+        // If context filter gives 0, retry with ID-only WHERE
+        if (matched <= 0 && contextWhere) {
+          const idOnlyCount = await this.withDefinitionExpressionDisabled(
+            layer,
+            async () =>
+              Number(
+                (await layer.queryFeatureCount({ where: idWhere } as any)) ?? 0,
+              ),
+          );
+          console.log(
+            `[applySelectionToMap] Retry idOnly: idOnlyCount=${idOnlyCount} field=${idField} sampleWhere=${idWhere.slice(0, 80)}`,
+          );
+          if (idOnlyCount > 0) {
+            matched = idOnlyCount;
+            where = idWhere;
+          }
+        }
+
+        if (matched <= 0) {
+          const binRangeWhere = this.buildSelectedBinMetricWhere(layer);
+          if (binRangeWhere) {
+            const rangeCount = await this.withDefinitionExpressionDisabled(
+              layer,
+              async () =>
+                Number(
+                  (await layer.queryFeatureCount({
+                    where: binRangeWhere,
+                  } as any)) ?? 0,
+                ),
+            );
+            console.log(
+              `[applySelectionToMap] Retry binRange: rangeCount=${rangeCount} sampleWhere=${binRangeWhere.slice(0, 120)}`,
+            );
+            if (rangeCount > 0) {
+              matched = rangeCount;
+              where = binRangeWhere;
+            }
+          }
+        }
+
+        if (matched <= 0) {
+          if (this.isStaleApplySelectionRun(runId)) return;
+          layer.definitionExpression = "1=0";
+          layer.visible = false;
+          this.setState({
+            activePolygonLayerId: layer.id,
+            mapError: "Tanlangan bin uchun polygon topilmadi. ID mos kelmadi.",
+            mapSelectedCount: 0,
+          });
+          return;
+        }
+
+        layer.definitionExpression = where;
+        layer.visible = true;
+
+        await this.renderSelectionOverlay(layer, where, matched);
+        if (this.isStaleApplySelectionRun(runId)) return;
+
+        // Save active layer ID so we can hide it later
+        this.setState({ activePolygonLayerId: layer.id, mapError: null });
+      } catch (e: any) {
+        if (!this.isStaleApplySelectionRun(runId)) {
+          this.setState({
+            mapError: `Failed to apply filter: ${e?.message ?? e}`,
+            mapSelectedCount: 0,
+          });
+        }
+        return;
       }
-    } catch {
-      // Keep polygons visible even if zoom fails.
+
+      if (this.isStaleApplySelectionRun(runId)) return;
+      this.setState({ mapSelectedCount: matched, mapError: null });
+
+      try {
+        const ext = await (layer as any).queryExtent({ where });
+        if (this.isStaleApplySelectionRun(runId)) return;
+        const extent = ext?.extent;
+        if (extent && (view as any).goTo) {
+          await (view as any).goTo(
+            extent.expand ? extent.expand(1.3) : extent,
+            {
+              duration: 300,
+            },
+          );
+        }
+      } catch {
+        // Keep polygons visible even if zoom fails.
+      }
+    } finally {
+      if (this._applySelectionInFlightSignature === signature) {
+        this._applySelectionInFlightSignature = "";
+      }
     }
   };
 
@@ -6077,9 +6127,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       const isCurrentlyFocused = currentFocused === gid;
 
       if (isCurrentlyFocused) {
-        // Ikkinchi marta bosildi: default holatga qaytish (zoom out + selection clear)
+        // Ikkinchi marta bosildi: row focusni yechib, bin selection xaritasini qayta tiklash
         this.setState({ focusedGlobalId: "" });
-        await this.clearMapSelectionAndZoomOut();
+        await this.restoreSelectedBinPolygons();
       } else {
         // Birinchi marta bosildi: aynan shu maydonga zoom
         this.setState({ focusedGlobalId: gid });
