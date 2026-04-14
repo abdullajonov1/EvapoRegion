@@ -104,6 +104,8 @@ export default class AgriPolygon extends React.PureComponent<
   private _popupRef: React.RefObject<HTMLDivElement> = React.createRef();
   private _highlightLayer: __esri.GraphicsLayer | null = null;
   private _highlightGraphic: __esri.Graphic | null = null;
+  private _isDraggingPopup = false;
+  private _popupDragOffset = { x: 0, y: 0 };
 
   constructor(props: AllWidgetProps<Config>) {
     super(props);
@@ -200,6 +202,8 @@ export default class AgriPolygon extends React.PureComponent<
     document.removeEventListener("mousedown", this.handleOutsideClick);
     window.removeEventListener("resize", this.repositionPinnedIfNeeded);
     window.removeEventListener("scroll", this.repositionPinnedIfNeeded, true);
+    window.removeEventListener("mousemove", this.onPopupDragMove);
+    window.removeEventListener("mouseup", this.onPopupDragEnd);
     if (this.themeObserver) {
       this.themeObserver.disconnect();
       this.themeObserver = null;
@@ -333,6 +337,50 @@ export default class AgriPolygon extends React.PureComponent<
         this.closePopup();
       }
     }
+  };
+
+  private onPopupHeaderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Allow normal behavior for controls inside header.
+    const target = e.target as HTMLElement;
+    if (target?.closest("button, a, input, textarea, select")) return;
+    if (e.button !== 0) return;
+
+    const popupEl = this._popupRef.current;
+    if (!popupEl) return;
+
+    const rect = popupEl.getBoundingClientRect();
+    this._isDraggingPopup = true;
+    this._popupDragOffset = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+
+    if (this.state.pinToCorner) {
+      this.setState({ pinToCorner: false });
+    }
+
+    window.addEventListener("mousemove", this.onPopupDragMove);
+    window.addEventListener("mouseup", this.onPopupDragEnd);
+    e.preventDefault();
+  };
+
+  private onPopupDragMove = (e: MouseEvent) => {
+    if (!this._isDraggingPopup || !this._isMounted) return;
+    const view = this.state.jimuMapView?.view;
+    if (!view) return;
+
+    const nextPos = {
+      x: e.clientX - this._popupDragOffset.x,
+      y: e.clientY - this._popupDragOffset.y,
+    };
+    const clamped = this.clampPopupToMapContainer(nextPos, view);
+    this.setState({ popupPosition: clamped });
+  };
+
+  private onPopupDragEnd = () => {
+    this._isDraggingPopup = false;
+    window.removeEventListener("mousemove", this.onPopupDragMove);
+    window.removeEventListener("mouseup", this.onPopupDragEnd);
   };
   /** ✅ NEW: safely detect whether this layer supports attachments */
   private layerSupportsAttachments(
@@ -1488,7 +1536,7 @@ export default class AgriPolygon extends React.PureComponent<
       pinToCorner && view ? this.calculatePinnedPosition(view) : null;
 
     // Calculate responsive max-width based on map container size
-    let maxWidth = 360; // Smaller default for compact 1-column layout
+    let maxWidth = 560; // Slightly wider popup for balanced two-column rows
     let containerWidth = window.innerWidth;
     let mapRect = {
       left: 0,
@@ -1499,8 +1547,8 @@ export default class AgriPolygon extends React.PureComponent<
     if (view && view.container) {
       mapRect = (view.container as HTMLElement).getBoundingClientRect();
       containerWidth = mapRect.width;
-      // Leave 24px margin, prefer smaller width for 1-column cards
-      maxWidth = Math.max(240, Math.min(360, containerWidth - 24));
+      // Leave 24px margin, keep enough width for two-column row layout
+      maxWidth = Math.max(360, Math.min(620, containerWidth - 24));
     }
 
     // For free popups, constrain maxWidth based on left position
@@ -1510,7 +1558,7 @@ export default class AgriPolygon extends React.PureComponent<
       const popupLeftRelativeToMap = popupPosition.x - mapRect.left;
       const availableWidth = mapRect.width - popupLeftRelativeToMap - 12;
       // Use the smaller: default maxWidth or actual available space
-      effectiveMaxWidth = Math.min(maxWidth, Math.max(240, availableWidth));
+      effectiveMaxWidth = Math.min(maxWidth, Math.max(360, availableWidth));
     }
 
     const stylePinned: React.CSSProperties = pinnedPos
@@ -1542,7 +1590,7 @@ export default class AgriPolygon extends React.PureComponent<
         style={popupStyle}
         ref={this._popupRef}
       >
-        <div className="agri3-popup-header">
+        <div className="agri3-popup-header" onMouseDown={this.onPopupHeaderMouseDown}>
           <h2 className="agri3-popup-title">{title}</h2>
 
           <button
@@ -1599,9 +1647,7 @@ export default class AgriPolygon extends React.PureComponent<
                 )
                 .map((name) => (
                   <div className="agri3-field-item" key={name}>
-                    <div className="agri3-field-label">
-                      {this.getFieldAlias(name)}
-                    </div>
+                    <div className="agri3-field-label">{this.getFieldAlias(name)}</div>
                     <div className="agri3-field-value">
                       {this.formatValue(name, selectedAttrs[name])}
                     </div>

@@ -186,7 +186,7 @@ export default class CropDistributionWidget extends React.PureComponent<
     );
   };
 
-  constructor(props) {
+  constructor(props: AllWidgetProps<any>) {
     super(props);
 
     this.containerRef = React.createRef();
@@ -373,7 +373,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   };
 
   // Add method to handle min/max selection event
-  handleMinMaxSelection = (event): void => {
+  handleMinMaxSelection = (event: any): void => {
     if (!event || !event.detail) return;
 
     const { minMax, timestamp = 0, source } = event.detail;
@@ -563,9 +563,10 @@ export default class CropDistributionWidget extends React.PureComponent<
       await this.connectToMap(jimuMapView);
       this.initializeAfterConnection();
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       this.setState({
-        error: `Error initializing map: ${err.message}`,
-        mapLoadingStatus: err.message.includes("timeout")
+        error: `Error initializing map: ${errMsg}`,
+        mapLoadingStatus: errMsg.includes("timeout")
           ? "failed"
           : this.state.mapLoadingStatus,
         connectionStatus: "failed",
@@ -590,8 +591,9 @@ export default class CropDistributionWidget extends React.PureComponent<
         },
       );
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       this.setState({
-        error: `Error retrieving layer fields: ${err.message}`,
+        error: `Error retrieving layer fields: ${errMsg}`,
       });
     }
   }
@@ -995,8 +997,8 @@ export default class CropDistributionWidget extends React.PureComponent<
               ? json.items
               : [];
           const values = rows
-            .filter((row) => row && typeof row === "object")
-            .map((row) =>
+            .filter((row: any) => row && typeof row === "object")
+            .map((row: any) =>
               String(row?.value ?? row?.label ?? row?.name ?? "").trim(),
             )
             .filter(Boolean);
@@ -1171,7 +1173,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   }
 
   // Handle canal selection
-  handlecanalselection = async (event): Promise<void> => {
+  handlecanalselection = async (event: any): Promise<void> => {
     if (event && event.detail) {
       const { timestamp = 0, source } = event.detail;
       const incomingCanal = String(
@@ -1266,7 +1268,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   };
 
   // Component update handling
-  componentDidUpdate(prevProps, prevState) {
+  componentDidUpdate(prevProps: any, prevState: any) {
     // Handle external filter changes
     if (this.props.externalFilters !== prevProps.externalFilters) {
       if (this.props.externalFilters) {
@@ -1315,7 +1317,7 @@ export default class CropDistributionWidget extends React.PureComponent<
       }
     }
   }
-  handleMasterStateUpdate = (event) => {
+  handleMasterStateUpdate = (event: any) => {
     if (!event?.detail || event.detail.source !== "MasterController") return;
 
     const m = event.detail;
@@ -1342,7 +1344,7 @@ export default class CropDistributionWidget extends React.PureComponent<
     );
   };
 
-  handleFilterChange = (event): void => {
+  handleFilterChange = (event: any): void => {
     const { detail: filters } = event;
     if (!filters || filters.source === "CropDistributionWidget") return;
 
@@ -1742,7 +1744,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   };
 
   // Handle water source change
-  handleWaterSourceChange = (event): void => {
+  handleWaterSourceChange = (event: any): void => {
     if (event && event.detail && event.detail.sourceSelected !== undefined) {
       const selectedWaterSource = event.detail.sourceSelected;
       const timestamp = event.detail.timestamp || 0;
@@ -1853,11 +1855,12 @@ export default class CropDistributionWidget extends React.PureComponent<
         );
       }
     } catch (err) {
-      this.setState({ error: `Error reading URL parameters: ${err.message}` });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.setState({ error: `Error reading URL parameters: ${errMsg}` });
     }
   };
 
-  updateFiltersFromProps = async (filters): Promise<void> => {
+  updateFiltersFromProps = async (filters: any): Promise<void> => {
     try {
       const currentCrop = this.state.selectedCrop;
       const incomingCanalName = filters.kanal_nomi || "";
@@ -1895,7 +1898,7 @@ export default class CropDistributionWidget extends React.PureComponent<
         yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
         selectedCrop: currentCrop,
         isHandlingExternalEvent: true,
-        error: null,
+        error: null as any,
       };
 
       const changed =
@@ -1920,12 +1923,13 @@ export default class CropDistributionWidget extends React.PureComponent<
         });
       }
     } catch (err) {
-      this.setState({ error: `Error updating filters: ${err.message}` });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.setState({ error: `Error updating filters: ${errMsg}` });
     }
   };
 
   // Handle slice click
-  handleSliceClick = (data, index): void => {
+  handleSliceClick = (data: any, index: any): void => {
     if (this.state.connectionStatus !== "connected") {
       return;
     }
@@ -2703,7 +2707,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   };
 
   // Custom tooltip for pie chart
-  renderCustomTooltip = (props): JSX.Element | null => {
+  renderCustomTooltip = (props: any): JSX.Element | null => {
     const { active, payload } = props;
     const { lang } = this.state;
 
@@ -2736,7 +2740,7 @@ export default class CropDistributionWidget extends React.PureComponent<
   };
 
   // Custom label for pie chart
-  renderCustomLabel = (props): JSX.Element | null => {
+  renderCustomLabel = (props: any): JSX.Element | null => {
     const {
       cx,
       cy,
@@ -2809,7 +2813,7 @@ export default class CropDistributionWidget extends React.PureComponent<
       Ikkilamchi: "🌾",
       Vegetatsiyasiz: "🟫",
     };
-    return cropIcons[cropName] || "🌱";
+    return (cropIcons as any)[cropName] || "🌱";
   };
 
   // Keep card wave color aligned with map renderer crop colors.
@@ -3313,7 +3317,7 @@ export default class CropDistributionWidget extends React.PureComponent<
     );
   };
 
-  handleClearSelection = (event) => {
+  handleClearSelection = (event: any) => {
     const src = String(event?.detail?.source || "");
     if (src === "EvapoWidget" || src === "LocalizationWidgetV20") {
       this.setState({
@@ -3323,7 +3327,7 @@ export default class CropDistributionWidget extends React.PureComponent<
     }
   };
 
-  handleExternalDependentReset = (event) => {
+  handleExternalDependentReset = (event: any) => {
     if (event?.detail?.source !== "EvapoWidget") return;
     const reason = String(event?.detail?.reason || "");
     if (

@@ -22,15 +22,18 @@ export class LocalRegionFilterEngine {
   private dsById: Record<string, QueriableDataSource> = {};
   private selectedDsIds: string[] = [];
   private yearToDsId: Record<string, string> = {};
+  private yearMatchCache: Record<string, string[]> = {};
 
   onDsCreated(ds: QueriableDataSource, ids: string[]): void {
     if (!ds?.id) return;
     this.dsById[ds.id] = ds;
     this.selectedDsIds = [...ids];
+    this.yearMatchCache = {};
   }
 
   syncDsSelection(ids: string[]): void {
     this.selectedDsIds = [...ids];
+    this.yearMatchCache = {};
   }
 
   /** Get the year→DS mapping (needed by widget for activeDataSourceId) */
@@ -40,8 +43,16 @@ export class LocalRegionFilterEngine {
 
   /** Get all DS ids that contain the selected year */
   async getDsIdsMatchingYear(yil: string): Promise<string[]> {
-    const dsList = await this.getDataSourcesMatchingYear(yil);
-    return dsList.map((ds: any) => String(ds?.id || "")).filter(Boolean);
+    const normalizedYear = this.normalizeYear(yil);
+    if (!normalizedYear) return [];
+
+    const cached = this.yearMatchCache[normalizedYear];
+    if (cached) return [...cached];
+
+    const dsList = await this.getDataSourcesMatchingYear(normalizedYear);
+    const matchedIds = dsList.map((ds: any) => String(ds?.id || "")).filter(Boolean);
+    this.yearMatchCache[normalizedYear] = matchedIds;
+    return [...matchedIds];
   }
 
   /** Get the DS URL for a given DS ID (used for URL-based layer matching) */
@@ -130,6 +141,7 @@ export class LocalRegionFilterEngine {
     }
 
     this.yearToDsId = yearToDsId;
+    this.yearMatchCache = {};
     return this.sortDistinct(years);
   }
 
@@ -257,14 +269,13 @@ export class LocalRegionFilterEngine {
     const normalizedYear = this.normalizeYear(yil);
     if (!normalizedYear) return [];
 
-    const dsList: QueriableDataSource[] = [];
-    for (const dsId of this.selectedDsIds) {
+    const checks = this.selectedDsIds.map(async (dsId) => {
       const ds = this.dsById[dsId];
-      if (!ds || !this.hasField(ds, "yil")) continue;
+      if (!ds || !this.hasField(ds, "yil")) return null;
 
       const yilField = this.resolveFieldName(ds, "yil") || "yil";
       const where = this.whereEq(yilField, normalizedYear, true);
-      if (!where) continue;
+      if (!where) return null;
 
       try {
         const res = await (ds as any).query({
@@ -274,14 +285,15 @@ export class LocalRegionFilterEngine {
           returnGeometry: false,
           pageSize: 1,
         });
-        if ((res?.records || []).length > 0) {
-          dsList.push(ds);
-        }
+        return (res?.records || []).length > 0 ? ds : null;
       } catch {
         // Skip DS query failures; continue collecting from others.
+        return null;
       }
-    }
-    return dsList;
+    });
+
+    const settled = await Promise.all(checks);
+    return settled.filter(Boolean) as QueriableDataSource[];
   }
 
   // ---- PRIVATE HELPERS ----

@@ -2307,6 +2307,20 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       await layer.load();
     } catch {}
 
+    // Clear previous selection graphics immediately to avoid temporary "general polygons" flash.
+    try {
+      const gl = view.map.findLayerById(
+        SELECTION_LAYER_ID,
+      ) as __esri.GraphicsLayer;
+      if (gl) gl.removeAll();
+    } catch {}
+
+    // Hide any currently visible polygons while resolving the focused row filter.
+    try {
+      layer.visible = false;
+      layer.definitionExpression = "1=0";
+    } catch {}
+
     // Your layer stores "{GUID}" strings, so always match BOTH variants
     const coreId = this.normalizeGuid(gid);
     const idFieldRaw = await this.resolveBestIdFieldForSourceIds(layer, [
@@ -2358,13 +2372,6 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       });
       return;
     }
-
-    try {
-      const gl = view.map.findLayerById(
-        SELECTION_LAYER_ID,
-      ) as __esri.GraphicsLayer;
-      if (gl) gl.removeAll();
-    } catch {}
 
     // Show only this polygon
     try {
@@ -3718,6 +3725,12 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       await layer.load();
     } catch {}
 
+    // Prevent a short flash of previously visible polygons before new grouped filter applies.
+    try {
+      layer.visible = false;
+      layer.definitionExpression = "1=0";
+    } catch {}
+
     try {
       (layer as any).minScale = 0;
       (layer as any).maxScale = 0;
@@ -4559,6 +4572,12 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       } catch {}
       if (this.isStaleApplySelectionRun(runId)) return;
 
+      // Keep layer hidden until filtered WHERE is finalized.
+      try {
+        layer.visible = false;
+        layer.definitionExpression = "1=0";
+      } catch {}
+
       console.log("[applySelectionToMap] Layer resolved:", {
         url: (layer as any)?.url,
         id: layer.id,
@@ -4673,11 +4692,16 @@ export default class YieldWaterChartWidget extends React.PureComponent<
           return;
         }
 
+        // Keep layer hidden while overlay queries run (they temporarily disable
+        // definitionExpression internally), otherwise users can see a brief flash
+        // of unfiltered/all polygons.
         layer.definitionExpression = where;
-        layer.visible = true;
+        layer.visible = false;
 
         await this.renderSelectionOverlay(layer, where, matched);
         if (this.isStaleApplySelectionRun(runId)) return;
+
+        layer.visible = true;
 
         // Save active layer ID so we can hide it later
         this.setState({ activePolygonLayerId: layer.id, mapError: null });
@@ -4807,6 +4831,9 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       });
       return;
     }
+
+    // Hide previously visible polygons immediately to avoid temporary "all polygons" flash.
+    await this.hidePolygonLayerUntilSelection(true);
 
     const bins: Array<{ x: number; y: number }> = [];
     for (const b of this.state.chartData) {
@@ -6129,6 +6156,8 @@ export default class YieldWaterChartWidget extends React.PureComponent<
       if (isCurrentlyFocused) {
         // Ikkinchi marta bosildi: row focusni yechib, bin selection xaritasini qayta tiklash
         this.setState({ focusedGlobalId: "" });
+        // Hide current focused polygon instantly so there is no flash before restore.
+        this.clearMapSelection();
         await this.restoreSelectedBinPolygons();
       } else {
         // Birinchi marta bosildi: aynan shu maydonga zoom

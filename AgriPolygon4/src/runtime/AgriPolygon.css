@@ -165,8 +165,8 @@ body.light-theme .agri3-attr-card {
 /* Direct popup without overlay blur - optimized for performance and better positioning */
 .agri3-popup-direct {
   position: fixed;
-  /* Minimal width - allow compact 1-column cards */
-  min-width: 240px;
+  /* Wider popup for two-column field rows */
+  min-width: 360px;
   width: auto;
   max-width: 100%;
   background: var(--agri-shell-bg);
@@ -202,7 +202,7 @@ body.light-theme .agri3-attr-card {
 /* Make popup responsive to smaller map containers */
 @media (max-width: 768px) {
   .agri3-popup-direct {
-    min-width: 240px;
+    min-width: 320px;
     max-width: 95vw;
     max-height: 80vh;
   }
@@ -210,7 +210,7 @@ body.light-theme .agri3-attr-card {
 
 @media (max-width: 500px) {
   .agri3-popup-direct {
-    min-width: 200px;
+    min-width: 240px;
     max-width: 98vw;
     max-height: 75vh;
   }
@@ -244,6 +244,8 @@ body.light-theme .agri3-attr-card {
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
+  cursor: move;
+  user-select: none;
 }
 
 .agri3-popup-title {
@@ -356,8 +358,8 @@ body.light-theme .agri3-attr-card {
 }
 
 .agri3-popup-content {
-  /* Ultra compact padding */
-  padding: 6px 8px 8px 8px;
+  /* Unified compact spacing */
+  padding: 6px;
   background: var(--agri-surface);
   /* Handle overflow for long content */
   overflow-y: auto;
@@ -372,9 +374,14 @@ body.light-theme .agri3-attr-card {
   word-break: break-word;
 }
 
+/* Keep equal inner spacing on all sides */
+.agri3-popup-content > *:last-child {
+  margin-bottom: 0 !important;
+}
+
 @media (max-width: 500px) {
   .agri3-popup-content {
-    padding: 10px 12px 12px 12px;
+    padding: 6px;
     max-height: calc(80vh - 90px);
   }
 }
@@ -414,47 +421,34 @@ body.light-theme .agri3-attr-card {
 
 /* Modern field grid - auto-fit responsive layout with scroll for 4+ cards */
 .agri3-field-grid {
-  display: grid;
-  /* Responsive: 1 column default, 2+ if space allows */
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  /* Optimal gap between cards */
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  /* Minimal bottom spacing */
   margin-bottom: 0;
-  /* CRITICAL: Ensure grid doesn't overflow */
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  /* Scrollable when 4+ cards */
-  max-height: 180px;
+  max-height: 260px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px; /* Space for scrollbar */
-}
-
-/* Force 1 column on very small screens */
-@media (max-width: 350px) {
-  .agri3-field-grid {
-    grid-template-columns: 1fr;
-  }
+  padding-right: 0;
 }
 
 .agri3-field-item {
   background: var(--agri-card-bg);
   border-radius: 4px;
-  /* Ultra compact padding */
-  padding: 4px 6px;
+  padding: 0;
   border: 1px solid var(--agri-card-border);
-  /* Simplified hover effect */
   transition:
     background-color 0.2s ease,
     transform 0.1s ease;
-  /* CRITICAL: Ensure field item doesn't overflow */
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0;
 }
 
 .agri3-field-item:hover {
@@ -463,32 +457,32 @@ body.light-theme .agri3-attr-card {
 }
 
 .agri3-field-label {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--agri-muted);
   text-transform: uppercase;
-  letter-spacing: 0px;
-  margin-bottom: 2px;
-  display: block;
-  /* Handle long labels */
+  letter-spacing: 0.2px;
+  margin-bottom: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 8px 10px;
+  border-right: 1px solid var(--agri-card-border);
 }
 
 .agri3-field-value {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--agri-text);
+  line-height: 1.25;
+  text-align: right;
   word-break: break-word;
-  line-height: 1.2;
-  /* Handle very long values */
-  max-height: 4.2em; /* Approximately 3 lines */
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
+  padding: 8px 10px;
 }
 
 .agri3-field-value.empty {
@@ -579,7 +573,7 @@ body.light-theme .agri3-attr-card {
   }
 
   .agri3-popup-content {
-    padding: 16px;
+    padding: 6px;
     max-height: calc(100vh - 100px);
   }
 

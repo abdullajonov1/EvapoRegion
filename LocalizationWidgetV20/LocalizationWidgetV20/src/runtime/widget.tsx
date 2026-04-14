@@ -475,10 +475,20 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   /** Cached FeatureLayerView instances keyed by layer.id — allows synchronous lv.filter updates. */
   private _layerViewMap: Map<string, any> = new Map();
   private _prevDefinitionExpression = "";
+  private _prevActiveLayerId = "";
+  private _prevAppliedYear = "";
   private _mapFilterRunId = 0;
   private _fallbackLayerId: string | null = null;
   private _fallbackOriginalDefExpr: string | null = null;
   private _fallbackOriginalMinScale: number | null = null;
+  private _fallbackOriginalMaxScale: number | null = null;
+  /** true = restore maxAllowableOffset from _fallbackOriginalMaxAllowableOffsetValue on clear */
+  private _fallbackMaxAllowableOffsetCaptured = false;
+  private _fallbackOriginalMaxAllowableOffsetValue: number | undefined =
+    undefined;
+  /** true = restore featureReduction from _fallbackOriginalFeatureReductionValue on clear */
+  private _fallbackFeatureReductionCaptured = false;
+  private _fallbackOriginalFeatureReductionValue: any = undefined;
   private _initialSyncTimer: number | null = null;
   private _canalReverseTranslationCache: Record<
     string,
@@ -499,6 +509,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   private _dirTranslationReqId = 0;
   private _regionDirectoryOptionsCache: string[] = [];
   private _regionDirectoryCacheAt = 0;
+  private _lastNotifiedFilterKey = "";
+  private _lastNotifiedAt = 0;
   private _districtOptionsCache: Record<
     string,
     { opts: string[]; at: number }
@@ -1891,6 +1903,24 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     await this.applyMapFilters();
   };
 
+  /**
+   * Har qanday zoomda maydon polygonlarini to‘liq geometriya bilan chizish.
+   * (maxAllowableOffset bo‘lmasa xarita uzoqdan soddalashtirilgan kontur ko‘rsatadi.)
+   */
+  private configureFeatureLayerFullGeometry = (layer: any): void => {
+    if (!layer || layer.type !== "feature") return;
+    try {
+      layer.minScale = 0;
+      layer.maxScale = 0;
+      layer.maxAllowableOffset = 0;
+      if (layer.featureReduction != null) {
+        layer.featureReduction = null;
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   /* ── Apply WHERE to a single layer view (mirrors Evapo-RegionV31) ── */
   private applyWhereToLayerView = async (
     layer: any,
@@ -1973,6 +2003,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       const q = layer.createQuery ? layer.createQuery() : { where };
       q.where = where;
       q.returnGeometry = true;
+      q.maxAllowableOffset = 0;
 
       let extent = null as any;
 
@@ -2063,6 +2094,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       await this.clearFallbackLayer();
       if (this.isStaleMapFilterRun(runId)) return;
       this._prevDefinitionExpression = "1=0";
+      this._prevActiveLayerId = "";
+      this._prevAppliedYear = "";
       return;
     }
 
@@ -2075,6 +2108,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       await this.clearFallbackLayer();
       if (this.isStaleMapFilterRun(runId)) return;
       this._prevDefinitionExpression = "1=0";
+      this._prevActiveLayerId = "";
       return;
     }
 
@@ -2091,28 +2125,21 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     // Determine active layer
     let activeLayer: any = null;
+    let yearModeTargets: any[] = [];
     if (isYearLayer && filters.yil) {
+      const mappedDs = this.regionFilterEngine.getActiveDs(filters) as any;
+      const mappedLayer = mappedDs?.id ? this._dsLayerMap[mappedDs.id] : null;
+      if (mappedLayer) {
+        activeLayer = mappedLayer;
+      }
+
       const candidateDsIds = await this.regionFilterEngine.getDsIdsMatchingYear(
         filters.yil,
       );
       const candidateLayers = candidateDsIds
         .map((id) => this._dsLayerMap[id])
         .filter(Boolean);
-
-      if (candidateLayers.length > 1 && filters.viloyat) {
-        const regionWhere = this.regionFilterEngine.buildWhereClause(filters);
-        for (const layer of candidateLayers) {
-          try {
-            const q = layer.createQuery ? layer.createQuery() : ({} as any);
-            q.where = regionWhere;
-            const count = Number((await layer.queryFeatureCount(q)) || 0);
-            if (count > 0) {
-              activeLayer = layer;
-              break;
-            }
-          } catch {}
-        }
-      }
+      yearModeTargets = candidateLayers;
 
       if (!activeLayer) {
         activeLayer = candidateLayers[0] || allLayers[0];
@@ -2128,19 +2155,29 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     // unfiltered features while the async lv.filter is being applied.
     if (activeLayer) {
       try {
+        this.configureFeatureLayerFullGeometry(activeLayer);
         activeLayer.definitionExpression = where;
       } catch {}
     }
 
-    // Show only the active layer
+    // In year-layer mode, keep all layers that contain the selected year visible.
+    // This avoids blank states when one candidate layer is slow/empty for a region.
+    const visibleSet = new Set<any>(
+      isYearLayer ? yearModeTargets : activeLayer ? [activeLayer] : [],
+    );
     allLayers.forEach((l: any) => {
       try {
-        l.visible = l === activeLayer;
+        l.visible = isYearLayer ? visibleSet.has(l) : l === activeLayer;
       } catch {}
     });
 
-    // Determine targets (year-layer: only active, single-DS: active)
-    const targets = activeLayer ? [activeLayer] : allLayers;
+    // Determine filter targets
+    const targets =
+      isYearLayer && yearModeTargets.length
+        ? yearModeTargets
+        : activeLayer
+          ? [activeLayer]
+          : allLayers;
     await Promise.all(targets.map((l) => this.applyWhereToLayerView(l, where)));
     if (this.isStaleMapFilterRun(runId)) return;
 
@@ -2150,7 +2187,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     await this.syncExtraMapLayers(allLayers, where, activeLayer);
     if (this.isStaleMapFilterRun(runId)) return;
 
-    const shouldZoom = this._prevDefinitionExpression !== where;
+    const activeLayerId = String(activeLayer?.id || "");
+    const yearChanged = this._prevAppliedYear !== String(filters.yil || "");
+    const layerChanged = this._prevActiveLayerId !== activeLayerId;
+    const shouldZoom =
+      this._prevDefinitionExpression !== where || yearChanged || layerChanged;
     if (shouldZoom) {
       // Zoom to fallback layer if one was activated, otherwise DS active layer
       let zoomLayer = this._fallbackLayerId
@@ -2231,6 +2272,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     if (this.isStaleMapFilterRun(runId)) return;
     this._prevDefinitionExpression = where;
+    this._prevActiveLayerId = activeLayerId;
+    this._prevAppliedYear = String(filters.yil || "");
   };
 
   /** Get the current fallback layer object (if any) */
@@ -2252,10 +2295,20 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const fallbackId = this._fallbackLayerId;
     const originalDefExpr = this._fallbackOriginalDefExpr;
     const originalMinScale = this._fallbackOriginalMinScale;
+    const originalMaxScale = this._fallbackOriginalMaxScale;
+    const maxAOCaptured = this._fallbackMaxAllowableOffsetCaptured;
+    const originalMaxAO = this._fallbackOriginalMaxAllowableOffsetValue;
+    const frCaptured = this._fallbackFeatureReductionCaptured;
+    const originalFR = this._fallbackOriginalFeatureReductionValue;
     // Clear tracking first so recursive / concurrent calls are no-ops.
     this._fallbackLayerId = null;
     this._fallbackOriginalDefExpr = null;
     this._fallbackOriginalMinScale = null;
+    this._fallbackOriginalMaxScale = null;
+    this._fallbackMaxAllowableOffsetCaptured = false;
+    this._fallbackOriginalMaxAllowableOffsetValue = undefined;
+    this._fallbackFeatureReductionCaptured = false;
+    this._fallbackOriginalFeatureReductionValue = undefined;
     try {
       const view: any = this._jimuMapView.view;
       const allMap: any[] =
@@ -2281,6 +2334,21 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         if (originalMinScale !== null) {
           try {
             fb.minScale = originalMinScale;
+          } catch {}
+        }
+        if (originalMaxScale !== null) {
+          try {
+            fb.maxScale = originalMaxScale;
+          } catch {}
+        }
+        if (maxAOCaptured) {
+          try {
+            fb.maxAllowableOffset = originalMaxAO;
+          } catch {}
+        }
+        if (frCaptured) {
+          try {
+            fb.featureReduction = originalFR;
           } catch {}
         }
         // Step 3: Remove the 1=0 guard — features load gradually from the server.
@@ -2383,6 +2451,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       const oldFallbackId = this._fallbackLayerId;
       const oldFallbackOriginalDefExpr = this._fallbackOriginalDefExpr;
       const oldFallbackOriginalMinScale = this._fallbackOriginalMinScale;
+      const oldFallbackOriginalMaxScale = this._fallbackOriginalMaxScale;
+      const oldFallbackMaxAOCaptured = this._fallbackMaxAllowableOffsetCaptured;
+      const oldFallbackOriginalMaxAO = this._fallbackOriginalMaxAllowableOffsetValue;
+      const oldFallbackFRCaptured = this._fallbackFeatureReductionCaptured;
+      const oldFallbackOriginalFR = this._fallbackOriginalFeatureReductionValue;
       const isSameLayer =
         !!oldFallbackId && oldFallbackId === newFallbackLayer.id;
 
@@ -2397,8 +2470,22 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         typeof newFallbackLayer.minScale === "number"
           ? newFallbackLayer.minScale
           : 0;
+      const savedMaxScale =
+        typeof newFallbackLayer.maxScale === "number"
+          ? newFallbackLayer.maxScale
+          : 0;
+      const savedMaxAllowableOffset = newFallbackLayer.maxAllowableOffset;
+      const savedFeatureReduction = newFallbackLayer.featureReduction;
+
+      if (!isSameLayer) {
+        this._fallbackOriginalMaxAllowableOffsetValue = savedMaxAllowableOffset;
+        this._fallbackMaxAllowableOffsetCaptured = true;
+        this._fallbackOriginalFeatureReductionValue = savedFeatureReduction;
+        this._fallbackFeatureReductionCaptured = true;
+      }
+
       try {
-        newFallbackLayer.minScale = 0;
+        this.configureFeatureLayerFullGeometry(newFallbackLayer);
       } catch {}
 
       if (!isSameLayer) {
@@ -2406,6 +2493,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         this._fallbackLayerId = newFallbackLayer.id;
         this._fallbackOriginalDefExpr = newFallbackOriginalDefExpr;
         this._fallbackOriginalMinScale = savedMinScale;
+        this._fallbackOriginalMaxScale = savedMaxScale;
       }
 
       try {
@@ -2458,6 +2546,21 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           if (oldFallbackOriginalMinScale !== null) {
             try {
               oldFb.minScale = oldFallbackOriginalMinScale;
+            } catch {}
+          }
+          if (oldFallbackOriginalMaxScale !== null) {
+            try {
+              oldFb.maxScale = oldFallbackOriginalMaxScale;
+            } catch {}
+          }
+          if (oldFallbackMaxAOCaptured) {
+            try {
+              oldFb.maxAllowableOffset = oldFallbackOriginalMaxAO;
+            } catch {}
+          }
+          if (oldFallbackFRCaptured) {
+            try {
+              oldFb.featureReduction = oldFallbackOriginalFR;
             } catch {}
           }
         }
@@ -3131,6 +3234,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     if (!this._isMounted) return;
 
     const { yil, viloyat, tuman, mavsum, fermer_nom } = this.state.filters;
+    const notifyKey = `${yil}|${viloyat}|${tuman}|${mavsum}|${fermer_nom}|${this.state.currentLang}`;
+    const now = Date.now();
+    if (
+      notifyKey === this._lastNotifiedFilterKey &&
+      now - this._lastNotifiedAt < 250
+    ) {
+      return;
+    }
+    this._lastNotifiedFilterKey = notifyKey;
+    this._lastNotifiedAt = now;
+
     const yilPayload = yil
       ? this.regionFilterEngine.isNumericField("yil")
         ? Number(yil)
