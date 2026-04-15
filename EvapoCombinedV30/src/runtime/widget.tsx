@@ -26,6 +26,14 @@ import {
 } from "./messages";
 import "./water-unified-widget.css";
 
+const console = {
+  log: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  info: (..._args: any[]) => {},
+  debug: (..._args: any[]) => {},
+};
+
 const DEFAULT_INITIAL_YEAR = "2025";
 const DEFAULT_INITIAL_REGION = "Farg'ona viloyati";
 

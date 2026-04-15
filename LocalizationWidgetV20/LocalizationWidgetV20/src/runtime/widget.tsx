@@ -27,6 +27,14 @@ import {
 } from "./local-region-filter";
 import "./widget.css";
 
+const console = {
+  log: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  info: (..._args: any[]) => {},
+  debug: (..._args: any[]) => {},
+};
+
 type LangCode = "uz_lat" | "uz_cyrl" | "ru";
 
 interface LanguageSelectorState {
@@ -75,15 +83,17 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const PREFS_INIT_KEY = "evapo_pref_initialized";
+const PREFS_INIT_KEY_V2 = "evapo_pref_initialized_ru_v2";
 
 const ensureInitialPrefs = (): void => {
   try {
-    if (localStorage.getItem(PREFS_INIT_KEY) === "1") return;
-    localStorage.setItem("app_lang", "uz_lat");
-    localStorage.setItem("evapo_app_lang", "uz_lat");
+    if (localStorage.getItem(PREFS_INIT_KEY_V2) === "1") return;
+    localStorage.setItem("app_lang", "ru");
+    localStorage.setItem("evapo_app_lang", "ru");
     localStorage.setItem("app_theme", "dark");
     localStorage.setItem("evapo_app_theme", "dark");
     localStorage.setItem(PREFS_INIT_KEY, "1");
+    localStorage.setItem(PREFS_INIT_KEY_V2, "1");
   } catch {
     // ignore storage errors
   }
@@ -358,14 +368,14 @@ const getInitialLang = (): LangCode => {
     const saved =
       localStorage.getItem("app_lang") ||
       localStorage.getItem("evapo_app_lang") ||
-      "uz_lat";
+      "ru";
     if (saved === "uz_lat" || saved === "uz_cyrl" || saved === "ru") {
       return saved;
     }
   } catch {
     // ignore and use default
   }
-  return "uz_lat";
+  return "ru";
 };
 
 const APP_BG_DARK_CLASS = "evapo-app-bg-dark";

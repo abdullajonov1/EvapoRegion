@@ -168,14 +168,14 @@ export function normalizeLang(input: any): LangCode {
     return "uz_lat";
   }
 
-  return "uz_lat";
+  return "ru";
 }
 
 export function getInitialLang(): LangCode {
   return normalizeLang(
     localStorage.getItem("evapo_app_lang") ||
       localStorage.getItem("app_lang") ||
-      "uz_lat",
+      "ru",
   );
 }
 

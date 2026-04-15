@@ -313,7 +313,7 @@ export function getInitialLang(): LangCode {
       if (raw === "uz_cyrl" || raw === "uz-cyrl") return "uz_cyrl";
     }
   } catch {}
-  return "uz_lat";
+  return "ru";
 }
 
 export function normalizeLangCode(input: any): LangCode {

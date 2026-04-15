@@ -24,6 +24,14 @@ import {
 
 import "./AgriPolygon.css";
 
+const console = {
+  log: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  info: (..._args: any[]) => {},
+  debug: (..._args: any[]) => {},
+};
+
 type Config = {
   fieldsToShow?: string[];
   titleField?: string;
@@ -597,12 +605,7 @@ export default class AgriPolygon extends React.PureComponent<
         const cand = layers.find((ly: any) => ly?.url === url);
         if (cand?.type === "feature") return cand as __esri.FeatureLayer;
       }
-    } catch (e) {
-      console.warn(
-        "[AgriPolygon] resolveFeatureLayerForUseDataSource error",
-        e,
-      );
-    }
+    } catch (_e) {}
     return null;
   };
   private clampPopupToMapContainer = (
@@ -951,10 +954,6 @@ export default class AgriPolygon extends React.PureComponent<
         });
         return;
       }
-
-      // ✅ For real errors (network/token), also keep it silent if you want.
-      // If you still want to see real errors somewhere else, log it instead:
-      console.warn("[AgriPolygon] Attachment load failed:", err);
 
       this.setState({
         loadingAttachments: false,

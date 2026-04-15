@@ -56,15 +56,17 @@ const MESSAGES: Record<string, MessagesDict> = {
 };
 
 const PREFS_INIT_KEY = "evapo_pref_initialized";
+const PREFS_INIT_KEY_V2 = "evapo_pref_initialized_ru_v2";
 
 const ensureInitialPrefs = (): void => {
   try {
-    if (localStorage.getItem(PREFS_INIT_KEY) === "1") return;
-    localStorage.setItem("app_lang", "uz_lat");
-    localStorage.setItem("evapo_app_lang", "uz_lat");
+    if (localStorage.getItem(PREFS_INIT_KEY_V2) === "1") return;
+    localStorage.setItem("app_lang", "ru");
+    localStorage.setItem("evapo_app_lang", "ru");
     localStorage.setItem("app_theme", "dark");
     localStorage.setItem("evapo_app_theme", "dark");
     localStorage.setItem(PREFS_INIT_KEY, "1");
+    localStorage.setItem(PREFS_INIT_KEY_V2, "1");
   } catch {
     // ignore storage errors
   }
@@ -110,10 +112,10 @@ export function getInitialLang(): string {
     const saved =
       localStorage.getItem("app_lang") ||
       localStorage.getItem("evapo_app_lang") ||
-      "uz_lat";
+      "ru";
     return normalizeLang(saved);
   } catch {
-    return "uz_lat";
+    return "ru";
   }
 }
 

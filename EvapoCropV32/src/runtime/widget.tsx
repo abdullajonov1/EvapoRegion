@@ -15,6 +15,14 @@ import {
   translateCropName,
 } from "./messages";
 
+const console = {
+  log: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  info: (..._args: any[]) => {},
+  debug: (..._args: any[]) => {},
+};
+
 const DEFAULT_INITIAL_YEAR = "2025";
 const DEFAULT_INITIAL_REGION = "Farg'ona viloyati";
 
@@ -643,7 +651,7 @@ export default class CropDistributionWidget extends React.PureComponent<
 
   // Format numbers for display
   private formatNumber(value: number): string {
-    const lang = this.state?.lang || "uz_lat";
+    const lang = this.state?.lang || "ru";
     const thousandUnit = t(lang as any, "evapoCrop.unit.thousand");
     const millionUnit = t(lang as any, "evapoCrop.unit.million");
 
@@ -660,7 +668,7 @@ export default class CropDistributionWidget extends React.PureComponent<
     mainValue: string;
     scaleUnit: string;
   } {
-    const lang = this.state?.lang || "uz_lat";
+    const lang = this.state?.lang || "ru";
     const thousandUnit = t(lang as any, "evapoCrop.unit.thousand");
     const millionUnit = t(lang as any, "evapoCrop.unit.million");
 

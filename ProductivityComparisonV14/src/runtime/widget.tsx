@@ -26,6 +26,14 @@ import FeatureLayer from "esri/layers/FeatureLayer";
 import GraphicsLayer from "esri/layers/GraphicsLayer";
 import { JimuMapView, JimuMapViewComponent } from "jimu-arcgis";
 
+const console = {
+  log: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  info: (..._args: any[]) => {},
+  debug: (..._args: any[]) => {},
+};
+
 const API_BASE_URL = "https://apiwater.sgm.uzspace.uz/api/v1";
 const API_ENDPOINTS = {
   chartData: "/analytics/dynamic-xy-chart",

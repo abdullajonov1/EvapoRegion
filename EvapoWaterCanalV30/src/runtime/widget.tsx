@@ -5,6 +5,15 @@ import { Button, Loading, LoadingType } from "jimu-ui";
 import { getInitialLang, getInitialTheme, normalizeLang, t } from "./messages";
 import "./water-canal.css";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+const console = {
+  log: (..._args: any[]) => {},
+  warn: (..._args: any[]) => {},
+  error: (..._args: any[]) => {},
+  info: (..._args: any[]) => {},
+  debug: (..._args: any[]) => {},
+};
+
 const {
   ResponsiveContainer,
   BarChart,
