@@ -11,6 +11,23 @@ const console = {
   debug: (..._args: any[]) => {},
 };
 
+const evapoRegionPipelineLog = (
+  widget: string,
+  phase: string,
+  detail: Record<string, unknown>,
+): void => {
+  try {
+    (globalThis as any).console?.log?.(
+      "[EvapoRegionPipeline]",
+      widget,
+      phase,
+      detail,
+    );
+  } catch {
+    /* ignore */
+  }
+};
+
 /* ═══════ TRANSLATIONS ═══════ */
 const translations: Record<string, Record<string, string>> = {
   "evapoCount.title": {
@@ -455,8 +472,26 @@ export default class EvapoIndicatorsV20 extends React.Component<
       });
 
       // Skip if we already fetched for this exact state recently
-      if (key === this._lastRefreshKey) return;
+      if (key === this._lastRefreshKey) {
+        evapoRegionPipelineLog(
+          "EvapoIndicatorsV30",
+          "scheduleDataRefresh SKIP (same refresh key)",
+          {
+            keyPreview:
+              key.length > 400 ? `${key.slice(0, 400)}…` : key,
+          },
+        );
+        return;
+      }
       this._lastRefreshKey = key;
+
+      evapoRegionPipelineLog(
+        "EvapoIndicatorsV30",
+        "scheduleDataRefresh RUN fetches",
+        {
+          keyPreview: key.length > 400 ? `${key.slice(0, 400)}…` : key,
+        },
+      );
 
       this.fetchCountData();
       this.fetchAreaData();
@@ -653,6 +688,20 @@ export default class EvapoIndicatorsV20 extends React.Component<
 
   private onFilterChanged = (e: any): void => {
     const d = e?.detail || {};
+    evapoRegionPipelineLog("EvapoIndicatorsV30", "waterSupplyFilterChanged", {
+      viloyat: d.viloyat,
+      tuman: d.tuman,
+      yil: d.yil,
+      mavsum: d.mavsum,
+      mavsumRaw: d.mavsumRaw,
+      mavsumForIndicators: d.mavsumForIndicators,
+      fermer_nom: d.fermer_nom ?? d.fermer_nomNom,
+      prevSnapshot: {
+        viloyat: this.state.viloyat,
+        tuman: this.state.tuman,
+        yil: this.state.yil,
+      },
+    });
     const newState: Partial<IndicatorsState> = {};
     if (d.viloyat !== undefined)
       newState.viloyat = String(d.viloyat ?? this.state.viloyat).trim();

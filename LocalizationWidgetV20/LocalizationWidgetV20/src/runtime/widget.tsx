@@ -35,6 +35,28 @@ const console = {
   debug: (..._args: any[]) => {},
 };
 
+/** Hudud filtrlari debug — o‘chirilgan (faqat ColorRenderer loglari qoldi). */
+const regionFilterDebugLog = (
+  _phase: string,
+  _detail: Record<string, unknown>,
+): void => {};
+
+/** Rang renderer: brauzer konsoliga (moduldagi `console` shadow qilingan). */
+const colorRendererDebugLog = (
+  phase: string,
+  detail?: Record<string, unknown>,
+): void => {
+  try {
+    (globalThis as any).console?.log?.(
+      "[LocalizationWidgetV20][ColorRenderer]",
+      phase,
+      detail ?? {},
+    );
+  } catch {
+    /* ignore */
+  }
+};
+
 type LangCode = "uz_lat" | "uz_cyrl" | "ru";
 
 interface LanguageSelectorState {
@@ -488,6 +510,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   private _prevActiveLayerId = "";
   private _prevAppliedYear = "";
   private _mapFilterRunId = 0;
+  /** applyMapFilters tanlagan aktiv FL uchun DS id (rang renderer bir xil qatlamni tanlasin). */
+  private _colorRendererActiveDsId: string | null = null;
   private _fallbackLayerId: string | null = null;
   private _fallbackOriginalDefExpr: string | null = null;
   private _fallbackOriginalMinScale: number | null = null;
@@ -588,6 +612,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     this.minMaxEngine.syncDsSelection(this.getSelectedDsIds());
     this.colorRendererEngine.syncDsSelection(this.getSelectedDsIds());
     this.regionFilterEngine.syncDsSelection(this.getSelectedDsIds());
+    this.colorRendererEngine.setYear(this.state.filters.yil || "");
 
     const root = document.documentElement;
     const body = document.body;
@@ -753,6 +778,8 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
     this.clearCloseTimer();
     this.clearRefetchTimer();
+    this._colorRendererActiveDsId = null;
+    this.colorRendererEngine.setPreferredDataSourceIds(null);
     this.colorRendererEngine.resetVisualization();
     this._dsLayerMap = {};
     this._jimuMapView = null;
@@ -855,6 +882,18 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     return this.normalizeLookupKey(value)
       .replace(/\s+viloyati$/i, "")
       .replace(/\s+вилояти$/i, "")
+      .trim();
+  }
+
+  /** Align API vs layer district labels so merge prefers one canonical spelling. */
+  private normalizeDistrictLookupKey(value: any): string {
+    return this.normalizeLookupKey(value)
+      .replace(/\s+tumani$/i, "")
+      .replace(/\s+shahri$/i, "")
+      .replace(/\s+shahar$/i, "")
+      .replace(/\s+тумани$/i, "")
+      .replace(/\s+шаҳри$/i, "")
+      .replace(/\s+район$/i, "")
       .trim();
   }
 
@@ -1546,11 +1585,20 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const prevYil = this.state.filters.yil;
     const prevViloyat = this.state.filters.viloyat;
     const next: LocalFilterState = { ...this.state.filters, ...partial };
+    const logRegion =
+      partial.viloyat !== undefined || partial.tuman !== undefined;
     if (
       this.getFilterSignature(next) ===
       this.getFilterSignature(this.state.filters)
-    )
+    ) {
+      if (logRegion) {
+        regionFilterDebugLog("updateFilter skipped (signature unchanged)", {
+          partial,
+          current: this.state.filters,
+        });
+      }
       return;
+    }
     this.minMaxEngine.cancel();
     this.colorRendererEngine.setYear(next.yil || "");
 
@@ -1559,6 +1607,25 @@ export default class LanguageSelectorV20 extends React.PureComponent<
       this.state.filters,
       next,
     ).then((validatedNext) => {
+      if (logRegion) {
+        let internalWhere = "";
+        try {
+          internalWhere =
+            this.regionFilterEngine?.buildWhereClause(validatedNext) ?? "";
+        } catch {
+          internalWhere = "(buildWhereClause error)";
+        }
+        regionFilterDebugLog("updateFilter validated", {
+          partial,
+          mergedBeforeValidate: next,
+          afterValidate: validatedNext,
+          adjusted:
+            this.getFilterSignature(next) !==
+            this.getFilterSignature(validatedNext),
+          internalWhere,
+          yearLayerMode: this.regionFilterEngine?.isYearLayerMode?.() ?? false,
+        });
+      }
       this.setState({ filters: validatedNext }, () => {
         afterUpdate?.(validatedNext);
         this.updateUrlWithFilters(validatedNext);
@@ -1612,6 +1679,13 @@ export default class LanguageSelectorV20 extends React.PureComponent<
           fermer_nom: "", // Ignore fermer when checking tuman
         });
 
+      regionFilterDebugLog("validateDependent: viloyat changed, tuman check", {
+        prevViloyat: prevFilters.viloyat,
+        nextViloyat: nextFilters.viloyat,
+        tuman: result.tuman,
+        tumanExists,
+      });
+
       if (!tumanExists) {
         result.tuman = "";
         result.fermer_nom = "";
@@ -1624,6 +1698,13 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         await this.regionFilterEngine.checkFilterCombinationExists({
           ...result,
         });
+
+      regionFilterDebugLog("validateDependent: tuman changed, fermer check", {
+        prevTuman: prevFilters.tuman,
+        nextTuman: nextFilters.tuman,
+        fermer_nom: result.fermer_nom,
+        farmerExists,
+      });
 
       if (!farmerExists) {
         result.fermer_nom = "";
@@ -1783,6 +1864,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const rect = this.colorRendererBtnRef.getBoundingClientRect();
     const menuWidth = 180;
     const layerFound = this.colorRendererEngine.hasLayer();
+    colorRendererDebugLog("openColorRendererDropdown", {
+      layerFound,
+      activeVisualization: this.state.activeVisualization,
+      filterYil: this.state.filters.yil,
+    });
     this.setState({
       showColorRendererDropdown: true,
       showLanguageDropdown: false,
@@ -1814,15 +1900,22 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     if (!jimuMapView?.view) {
       this._jimuMapView = null;
       this.colorRendererEngine.setMapView(null);
+      colorRendererDebugLog("onActiveViewChange (no view)", {});
       if (this._isMounted) this.setState({ colorRendererLayerFound: false });
       return;
     }
     const init = () => {
       this._jimuMapView = jimuMapView;
       this.colorRendererEngine.setMapView(jimuMapView);
+      const found = this.colorRendererEngine.hasLayer();
+      colorRendererDebugLog("onActiveViewChange / setMapView", {
+        mapViewReady: !!jimuMapView?.view?.ready,
+        colorRendererLayerFound: found,
+        selectedDsIds: this.getSelectedDsIds(),
+      });
       if (this._isMounted) {
         this.setState({
-          colorRendererLayerFound: this.colorRendererEngine.hasLayer(),
+          colorRendererLayerFound: found,
         });
       }
       void this.initializeMapConnection(jimuMapView);
@@ -2064,6 +2157,16 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
   };
 
+  /** `_dsLayerMap` ichidan aktiv FeatureLayer ga mos DS id. */
+  private resolveDsIdForActiveLayer(layer: any): string | null {
+    if (!layer?.id) return null;
+    const lid = String(layer.id);
+    for (const [dsId, lyr] of Object.entries(this._dsLayerMap)) {
+      if (lyr && String(lyr.id) === lid) return String(dsId);
+    }
+    return null;
+  }
+
   /* ── Main map filter orchestrator (mirrors Evapo-RegionV31 applyMapFiltersOptimized) ── */
   private applyMapFilters = async (): Promise<void> => {
     if (!this._isMounted) return;
@@ -2097,6 +2200,14 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     // 🔒 HARD BLOCK #1: no year → hide all + 1=0
     if (!hasYil) {
+      this._colorRendererActiveDsId = null;
+      this.colorRendererEngine.setYear("");
+      this.colorRendererEngine.setPreferredDataSourceIds(null);
+      regionFilterDebugLog("applyMapFilters branch", {
+        runId,
+        branch: "no-year",
+        filters,
+      });
       hideAll();
       await Promise.all(
         allLayers.map((l) => this.applyWhereToLayerView(l, "1=0")),
@@ -2111,6 +2222,14 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
     // 🔒 HARD BLOCK #2: no viloyat → hide all + 1=0
     if (!hasViloyat) {
+      this._colorRendererActiveDsId = null;
+      this.colorRendererEngine.setYear(String(filters.yil || ""));
+      this.colorRendererEngine.setPreferredDataSourceIds(null);
+      regionFilterDebugLog("applyMapFilters branch", {
+        runId,
+        branch: "no-viloyat",
+        filters,
+      });
       hideAll();
       await Promise.all(
         allLayers.map((l) => this.applyWhereToLayerView(l, "1=0")),
@@ -2133,15 +2252,32 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     ].filter(Boolean);
     const where = whereParts.length ? whereParts.join(" AND ") : "1=1";
 
+    regionFilterDebugLog("applyMapFilters where built", {
+      runId,
+      yil: filters.yil,
+      viloyat: filters.viloyat,
+      tuman: filters.tuman,
+      mavsum: filters.mavsum,
+      isYearLayer,
+      hasExternalWhere: {
+        source: !!externalSourceFilter,
+        canal: !!externalCanalFilter,
+        crop: !!externalCropFilter,
+        polygon: !!externalPolygonFilter,
+      },
+      wherePreview:
+        where.length > 520 ? `${where.slice(0, 520)}…` : where,
+    });
+
     // Determine active layer
     let activeLayer: any = null;
     let yearModeTargets: any[] = [];
+    /** Same DS ids as map filters so color renderer targets the correct year FL. */
+    let colorRendererPreferredDs: string[] | null = null;
+
     if (isYearLayer && filters.yil) {
       const mappedDs = this.regionFilterEngine.getActiveDs(filters) as any;
       const mappedLayer = mappedDs?.id ? this._dsLayerMap[mappedDs.id] : null;
-      if (mappedLayer) {
-        activeLayer = mappedLayer;
-      }
 
       const candidateDsIds = await this.regionFilterEngine.getDsIdsMatchingYear(
         filters.yil,
@@ -2151,22 +2287,116 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         .filter(Boolean);
       yearModeTargets = candidateLayers;
 
-      if (!activeLayer) {
-        activeLayer = candidateLayers[0] || allLayers[0];
-      }
+      // In year-layer mode, multiple layers can contain the same year.
+      // Pick the active layer by actual region match count, not only year->DS map.
+      const regionWhere = internalWhere || "1=1";
+      const scoredCandidates = await Promise.all(
+        candidateLayers.map(async (layer: any) => {
+          try {
+            const q = layer?.createQuery ? layer.createQuery() : ({} as any);
+            q.where = regionWhere;
+            const count = Number((await layer.queryFeatureCount(q)) || 0);
+            return { layer, count };
+          } catch {
+            return { layer, count: -1 };
+          }
+        }),
+      );
+
+      const mappedLayerCount = scoredCandidates.find(
+        (x) => x.layer?.id === mappedLayer?.id,
+      )?.count;
+      const bestByCount = scoredCandidates
+        .filter((x) => x.count > 0)
+        .sort((a, b) => b.count - a.count)[0]?.layer;
+
+      // Keep year->DS mapped layer as primary source to avoid startup drift.
+      // Only switch when mapped layer has no regional matches.
+      const shouldSwitchFromMapped =
+        !!mappedLayer &&
+        typeof mappedLayerCount === "number" &&
+        mappedLayerCount <= 0 &&
+        !!bestByCount;
+
+      activeLayer = mappedLayer
+        ? shouldSwitchFromMapped
+          ? bestByCount
+          : mappedLayer
+        : bestByCount ||
+          scoredCandidates.find((x) => x.count >= 0)?.layer ||
+          candidateLayers[0] ||
+          allLayers[0];
+
+      regionFilterDebugLog("applyMapFilters year-layer active source", {
+        runId,
+        yil: filters.yil,
+        mappedDsId: mappedDs?.id || "",
+        mappedLayerId: mappedLayer?.id || "",
+        mappedLayerCount:
+          typeof mappedLayerCount === "number" ? mappedLayerCount : null,
+        shouldSwitchFromMapped,
+        bestByCountLayerId: bestByCount?.id || "",
+        selectedLayerId: activeLayer?.id || "",
+        candidateDsIds,
+        candidateLayerIds: candidateLayers.map((l: any) => String(l?.id || "")),
+        candidateCounts: scoredCandidates.map((x) => ({
+          id: String(x.layer?.id || ""),
+          count: x.count,
+        })),
+        regionWherePreview:
+          regionWhere.length > 400
+            ? `${regionWhere.slice(0, 400)}…`
+            : regionWhere,
+      });
+
+      const activeDsIdForColor =
+        this.resolveDsIdForActiveLayer(activeLayer);
+      this._colorRendererActiveDsId = activeDsIdForColor;
+      colorRendererPreferredDs = activeDsIdForColor
+        ? [activeDsIdForColor]
+        : candidateDsIds.length
+          ? [...candidateDsIds]
+          : null;
     } else {
       activeLayer = allLayers[0];
+      const singleDs = this.regionFilterEngine.getActiveDs(filters) as any;
+      colorRendererPreferredDs = singleDs?.id ? [String(singleDs.id)] : null;
+      this._colorRendererActiveDsId = singleDs?.id
+        ? String(singleDs.id)
+        : null;
     }
+
+    this.colorRendererEngine.setYear(String(filters.yil || ""));
+    this.colorRendererEngine.setPreferredDataSourceIds(colorRendererPreferredDs);
 
     if (this.isStaleMapFilterRun(runId)) return;
 
-    // Pre-filter the active layer BEFORE making it visible so it loads with the
-    // correct definitionExpression from the first render frame — prevents flash of
-    // unfiltered features while the async lv.filter is being applied.
-    if (activeLayer) {
+    // Har bir ko‘rinadigan qatlamga WHERE ni **visibility dan oldin** qo‘llash kerak:
+    // yil-rejimida faqat activeLayer emas, yearModeTargets ham birdaniga visible
+    // bo‘ladi; aks holda yangi viloyat tanlanganda avvali “to‘liq maydon” flash
+    // chiqadi. Keshlangan LayerView bo‘lsa, filter ni shu yerda sinxron yangilaymiz.
+    const layersToPreFilter: any[] =
+      isYearLayer && yearModeTargets.length
+        ? yearModeTargets.filter(Boolean)
+        : activeLayer
+          ? [activeLayer]
+          : [];
+
+    for (const l of layersToPreFilter) {
+      if (!l) continue;
       try {
-        this.configureFeatureLayerFullGeometry(activeLayer);
-        activeLayer.definitionExpression = where;
+        this.configureFeatureLayerFullGeometry(l);
+        l.definitionExpression = where;
+        const cachedLv = this._layerViewMap.get(l.id);
+        if (cachedLv) {
+          cachedLv.filter = { where };
+          try {
+            cachedLv.featureEffect = {
+              filter: { where },
+              excludedEffect: "opacity(30%)",
+            };
+          } catch {}
+        }
       } catch {}
     }
 
@@ -2196,6 +2426,10 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     // that DOES have matching features (e.g. the field polygon layer).
     await this.syncExtraMapLayers(allLayers, where, activeLayer);
     if (this.isStaleMapFilterRun(runId)) return;
+
+    // Agar color renderer aktiv bo‘lsa, viloyat/yil o‘zgarishida yangi qatlamga
+    // darhol renderer qo‘llansin (user qayta tanlamasdan).
+    this.reapplyActiveColorRenderer();
 
     const activeLayerId = String(activeLayer?.id || "");
     const yearChanged = this._prevAppliedYear !== String(filters.yil || "");
@@ -2578,8 +2812,51 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     } catch {}
   };
 
-  private applyCropRenderer = (): void => {
+  /**
+   * Color renderer FL tanlashni hudud filtri bilan bir xil yil→DS bog‘lanishiga
+   * moslaydi (masalan 2025 uchun getDsIdsMatchingYear qatlamlari).
+   */
+  private syncColorRendererPreferredDsFromState = async (): Promise<void> => {
+    const f = this.state.filters;
+    this.colorRendererEngine.setYear(f?.yil || "");
+    if (!f?.yil || !f?.viloyat) {
+      this.colorRendererEngine.setPreferredDataSourceIds(null);
+      return;
+    }
+    try {
+      if (this.regionFilterEngine.isYearLayerMode()) {
+        if (this._colorRendererActiveDsId) {
+          this.colorRendererEngine.setPreferredDataSourceIds([
+            this._colorRendererActiveDsId,
+          ]);
+        } else {
+          const ids = await this.regionFilterEngine.getDsIdsMatchingYear(f.yil);
+          this.colorRendererEngine.setPreferredDataSourceIds(
+            ids.length ? ids : null,
+          );
+        }
+      } else {
+        const ds = this.regionFilterEngine.getActiveDs(f) as any;
+        this.colorRendererEngine.setPreferredDataSourceIds(
+          ds?.id ? [String(ds.id)] : null,
+        );
+      }
+    } catch {
+      this.colorRendererEngine.setPreferredDataSourceIds(null);
+    }
+  };
+
+  private applyCropRenderer = async (): Promise<void> => {
+    await this.syncColorRendererPreferredDsFromState();
+    colorRendererDebugLog("applyCropRenderer (before visualizeCropType)", {
+      selectedDsIds: this.getSelectedDsIds(),
+      filterYil: this.state.filters.yil,
+    });
     const err = this.colorRendererEngine.visualizeCropType();
+    colorRendererDebugLog("applyCropRenderer (after visualizeCropType)", {
+      error: err,
+      success: !err,
+    });
     if (!err && this._isMounted) {
       this.setState({
         activeVisualization: "crop",
@@ -2588,8 +2865,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     }
   };
 
-  private applyEfficiencyRenderer = (): void => {
+  private applyEfficiencyRenderer = async (): Promise<void> => {
+    await this.syncColorRendererPreferredDsFromState();
+    colorRendererDebugLog("applyEfficiencyRenderer (before)", {
+      selectedDsIds: this.getSelectedDsIds(),
+      filterYil: this.state.filters.yil,
+    });
     const err = this.colorRendererEngine.visualizeWaterEfficiency();
+    colorRendererDebugLog("applyEfficiencyRenderer (after)", {
+      error: err,
+      success: !err,
+    });
     if (!err && this._isMounted) {
       this.setState({
         activeVisualization: "efficiency",
@@ -2599,11 +2885,35 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   };
 
   private resetRenderer = (): void => {
+    colorRendererDebugLog("resetRenderer", {
+      hadActive: this.state.activeVisualization,
+    });
     this.colorRendererEngine.resetVisualization();
     if (this._isMounted) {
       this.setState({
         activeVisualization: null,
         showColorRendererDropdown: false,
+      });
+    }
+  };
+
+  /** Viloyat/yil qatlam almashganda ham tanlangan color renderer vizualizatsiyasini ushlab turish. */
+  private reapplyActiveColorRenderer = (): void => {
+    const v = this.state.activeVisualization;
+    if (!v) return;
+    // preferred DS + year allaqachon applyMapFilters / syncColorRendererPreferredDsFromState orqali sync qilinadi
+    let err: string | null = null;
+    if (v === "crop") err = this.colorRendererEngine.visualizeCropType();
+    else if (v === "efficiency")
+      err = this.colorRendererEngine.visualizeWaterEfficiency();
+    if (err) {
+      colorRendererDebugLog("reapplyActiveColorRenderer (error)", {
+        activeVisualization: v,
+        error: err,
+      });
+    } else {
+      colorRendererDebugLog("reapplyActiveColorRenderer (ok)", {
+        activeVisualization: v,
       });
     }
   };
@@ -2727,11 +3037,6 @@ export default class LanguageSelectorV20 extends React.PureComponent<
 
       await Promise.all(parallelLoads);
       const layerBasedViloyatOptions = [...regionOptions];
-      console.log("[LocalizationWidgetV20] Region options snapshot", {
-        selectedYil: filters.yil || "",
-        availableYilsFromAllLayers: yearOptions,
-        availableViloyatsAfterSelectedYil: layerBasedViloyatOptions,
-      });
 
       // Merge API-sourced options: regions from directory + districts from location API
       // Run in parallel to avoid sequential delays.
@@ -2751,6 +3056,7 @@ export default class LanguageSelectorV20 extends React.PureComponent<
         districtOptions = this.mergeUniqueByNormalizedKey(
           districtOptions,
           apiDistrictOptions,
+          (v) => this.normalizeDistrictLookupKey(v),
         );
       }
     }
@@ -2773,6 +3079,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
             this.normalizeRegionLookupKey(option) ===
             this.normalizeRegionLookupKey(DEFAULT_INITIAL_REGION),
         ) || regionOptions[0];
+
+      regionFilterDebugLog(
+        "refreshRegionFilterOptions FALLBACK (selected viloyat not in merged options)",
+        {
+          requestedYil: filters.yil || "",
+          selectedViloyat,
+          fallbackViloyat,
+          regionOptionCount: regionOptions.length,
+          sampleRegionOptions: regionOptions.slice(0, 8),
+        },
+      );
 
       const nextFilters: LocalFilterState = {
         ...filters,
@@ -2904,6 +3221,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
               ? { mavsum: value, fermer_nom: "" }
               : { fermer_nom: value };
 
+    if (key === "viloyat" || key === "tuman") {
+      regionFilterDebugLog("selectRegionFilterOption", {
+        key,
+        value,
+        valueLength: value?.length ?? 0,
+        prevFilters: { ...this.state.filters },
+        nextPartial,
+        yearLayerMode: this.regionFilterEngine?.isYearLayerMode?.() ?? false,
+      });
+    }
+
     // Special handling for hierarchical filters:
     // - viloyat/tuman/fermer changes must clear dependent external filters.
     if (key === "viloyat") {
@@ -2988,6 +3316,13 @@ export default class LanguageSelectorV20 extends React.PureComponent<
   ): void => {
     const prevViloyat = this.state.filters.viloyat;
 
+    regionFilterDebugLog("handleViloyatChange", {
+      viloyatValue,
+      prevViloyat,
+      sameValue: viloyatValue === prevViloyat,
+      nextPartial,
+    });
+
     // Only reset if actually changing viloyat
     if (viloyatValue === prevViloyat) return;
 
@@ -3007,6 +3342,15 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     nextPartial: Partial<LocalFilterState>,
   ): void => {
     const prevTuman = this.state.filters.tuman;
+
+    regionFilterDebugLog("handleTumanChange", {
+      tumanValue,
+      prevTuman,
+      sameValue: tumanValue === prevTuman,
+      viloyat: this.state.filters.viloyat,
+      yil: this.state.filters.yil,
+      nextPartial,
+    });
 
     // Only reset if actually changing tuman
     if (tumanValue === prevTuman) return;
@@ -3111,6 +3455,11 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const ids = this.getSelectedDsIds();
     this.minMaxEngine.onDsCreated(ds, ids);
     this.colorRendererEngine.onDsCreated(ds, ids);
+    colorRendererDebugLog("onAnyDataSourceCreated", {
+      dsId: ds?.id,
+      selectedDsIds: ids,
+      hasLayerAfter: this.colorRendererEngine.hasLayer(),
+    });
     this.regionFilterEngine.onDsCreated(ds, ids);
     if (this._isMounted) {
       this.setState({
@@ -3246,10 +3595,16 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const { yil, viloyat, tuman, mavsum, fermer_nom } = this.state.filters;
     const notifyKey = `${yil}|${viloyat}|${tuman}|${mavsum}|${fermer_nom}|${this.state.currentLang}`;
     const now = Date.now();
+    const msSinceLast = now - this._lastNotifiedAt;
     if (
       notifyKey === this._lastNotifiedFilterKey &&
-      now - this._lastNotifiedAt < 250
+      msSinceLast < 250
     ) {
+      regionFilterDebugLog("notifyFilterChange SKIPPED (250ms dedup)", {
+        notifyKey,
+        msSinceLast,
+        lastKey: this._lastNotifiedFilterKey,
+      });
       return;
     }
     this._lastNotifiedFilterKey = notifyKey;
@@ -3264,6 +3619,17 @@ export default class LanguageSelectorV20 extends React.PureComponent<
     const outgoingMavsum = this.getOutgoingMavsumValue(mavsum);
     const outgoingMavsumForIndicators =
       this.getOutgoingMavsumForIndicators(mavsum);
+
+    regionFilterDebugLog("notifyFilterChange DISPATCH waterSupplyFilterChanged", {
+      notifyKey,
+      yil: yilPayload,
+      viloyat,
+      tuman,
+      mavsum: outgoingMavsum,
+      mavsumRaw: mavsum,
+      fermer_nom,
+      lang: this.state.currentLang,
+    });
 
     document.dispatchEvent(
       new CustomEvent("waterSupplyFilterChanged", {

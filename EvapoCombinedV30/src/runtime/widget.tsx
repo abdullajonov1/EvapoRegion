@@ -34,6 +34,23 @@ const console = {
   debug: (..._args: any[]) => {},
 };
 
+const evapoRegionPipelineLog = (
+  widget: string,
+  phase: string,
+  detail: Record<string, unknown>,
+): void => {
+  try {
+    (globalThis as any).console?.log?.(
+      "[EvapoRegionPipeline]",
+      widget,
+      phase,
+      detail,
+    );
+  } catch {
+    /* ignore */
+  }
+};
+
 const DEFAULT_INITIAL_YEAR = "2025";
 const DEFAULT_INITIAL_REGION = "Farg'ona viloyati";
 
@@ -1684,6 +1701,19 @@ export default class WaterUnifiedWidget extends React.PureComponent<
   waterUnifiedHandleFilterChange(event) {
     if (event && event.detail) {
       const filters = event.detail;
+      evapoRegionPipelineLog("EvapoCombinedV30", "waterSupplyFilterChanged", {
+        viloyat: filters.viloyat,
+        tuman: filters.tuman,
+        yil: filters.yil,
+        mavsumRaw: filters.mavsumRaw,
+        mavsum: filters.mavsum,
+        fermer_nomNom: filters.fermer_nomNom,
+        prevSnapshot: {
+          viloyat: this.state.viloyat,
+          tuman: this.state.tuman,
+          yil: this.state.yil,
+        },
+      });
       const hasRawMavsum =
         filters && Object.prototype.hasOwnProperty.call(filters, "mavsumRaw");
       const incomingMavsum = hasRawMavsum
@@ -1707,7 +1737,20 @@ export default class WaterUnifiedWidget extends React.PureComponent<
         incomingMavsum === (this.state.mavsum || "") &&
         nextFermer === (this.state.fermer_nomNom || "") &&
         nextYil === (this.state.yil || DEFAULT_INITIAL_YEAR);
-      if (hasNoChanges) return;
+      if (hasNoChanges) {
+        evapoRegionPipelineLog(
+          "EvapoCombinedV30",
+          "waterUnifiedHandleFilterChange SKIP (state unchanged)",
+          {
+            nextViloyat,
+            nextTuman,
+            nextYil,
+            incomingMavsum,
+            nextFermer,
+          },
+        );
+        return;
+      }
 
       this.setState(
         (prev) => ({

@@ -14,6 +14,23 @@ const console = {
   debug: (..._args: any[]) => {},
 };
 
+const evapoRegionPipelineLog = (
+  widget: string,
+  phase: string,
+  detail: Record<string, unknown>,
+): void => {
+  try {
+    (globalThis as any).console?.log?.(
+      "[EvapoRegionPipeline]",
+      widget,
+      phase,
+      detail,
+    );
+  } catch {
+    /* ignore */
+  }
+};
+
 const {
   ResponsiveContainer,
   BarChart,
@@ -1061,6 +1078,21 @@ export default class EvapoWaterCanalV20 extends React.PureComponent<
     const d = e?.detail || {};
     // Only filter out events from this widget itself to prevent loops
     if (d.source === "EvapoWaterCanalV20") return;
+
+    evapoRegionPipelineLog("EvapoWaterCanalV30", "waterSupplyFilterChanged", {
+      viewType: this.props.config?.viewType || "waterSource",
+      viloyat: d.viloyat,
+      tuman: d.tuman,
+      yil: d.yil,
+      mavsum: d.mavsum,
+      mavsumRaw: d.mavsumRaw,
+      fermer: d.fermer_nom ?? d.fermer_nomNom,
+      prevSnapshot: {
+        viloyat: this.state.viloyat,
+        tuman: this.state.tuman,
+        yil: this.state.yil,
+      },
+    });
 
     const viewType = this.props.config?.viewType || "waterSource";
     const newState: Partial<WaterCanalState> = {};

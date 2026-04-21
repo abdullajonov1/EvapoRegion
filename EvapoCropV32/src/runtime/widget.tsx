@@ -23,6 +23,23 @@ const console = {
   debug: (..._args: any[]) => {},
 };
 
+const evapoRegionPipelineLog = (
+  widget: string,
+  phase: string,
+  detail: Record<string, unknown>,
+): void => {
+  try {
+    (globalThis as any).console?.log?.(
+      "[EvapoRegionPipeline]",
+      widget,
+      phase,
+      detail,
+    );
+  } catch {
+    /* ignore */
+  }
+};
+
 const DEFAULT_INITIAL_YEAR = "2025";
 const DEFAULT_INITIAL_REGION = "Farg'ona viloyati";
 
@@ -1356,6 +1373,20 @@ export default class CropDistributionWidget extends React.PureComponent<
     const { detail: filters } = event;
     if (!filters || filters.source === "CropDistributionWidget") return;
 
+    evapoRegionPipelineLog("EvapoCropV32", "waterSupplyFilterChanged", {
+      viloyat: filters.viloyat,
+      tuman: filters.tuman,
+      yil: filters.yil,
+      mavsum: filters.mavsum,
+      fermer: filters.fermer_nomNom ?? filters.fermer_nom,
+      prevSnapshot: {
+        viloyat: this.state.viloyat,
+        tuman: this.state.tuman,
+        yil: this.state.yil,
+      },
+      connectionStatus: this.state.connectionStatus,
+    });
+
     const currentCrop = this.state.selectedCrop;
 
     const incomingFermer = filters.fermer_nomNom ?? filters.fermer_nom ?? "";
@@ -1426,7 +1457,26 @@ export default class CropDistributionWidget extends React.PureComponent<
 
     // Fermer-only changes still must refresh API data for correct crop totals.
     const shouldRefetch = fermerChanged || otherFiltersChanged;
-    if (!shouldRefetch) return;
+    if (!shouldRefetch) {
+      evapoRegionPipelineLog("EvapoCropV32", "handleFilterChange SKIP refetch", {
+        viloyatChanged,
+        tumanChanged,
+        fermerChanged,
+        otherFiltersChanged,
+      });
+      return;
+    }
+
+    evapoRegionPipelineLog("EvapoCropV32", "handleFilterChange APPLY setState+fetchCropData", {
+      viloyat:
+        filters.viloyat || this.state.viloyat || DEFAULT_INITIAL_REGION,
+      tuman: filters.tuman || "",
+      yil: this.normalizeYearValue(filters.yil) || DEFAULT_INITIAL_YEAR,
+      viloyatChanged,
+      tumanChanged,
+      fermerChanged,
+      otherFiltersChanged,
+    });
 
     this.setState(
       {

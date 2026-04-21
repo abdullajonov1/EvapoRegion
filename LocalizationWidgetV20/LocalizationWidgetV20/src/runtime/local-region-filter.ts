@@ -219,7 +219,27 @@ export class LocalRegionFilterEngine {
         continue;
       }
 
-      parts.push(this.whereEq(realK, v, realK.toLowerCase() === "yil"));
+      const kLower = realK.toLowerCase();
+      if (kLower === "viloyat") {
+        const clause = this.whereTextMatches(
+          realK,
+          v,
+          this.getRegionValueVariants(v),
+        );
+        if (clause) parts.push(clause);
+        continue;
+      }
+      if (kLower === "tuman") {
+        const clause = this.whereTextMatches(
+          realK,
+          v,
+          this.getDistrictValueVariants(v),
+        );
+        if (clause) parts.push(clause);
+        continue;
+      }
+
+      parts.push(this.whereEq(realK, v, kLower === "yil"));
     }
 
     // Ensure selected year is always enforced when present.
@@ -469,6 +489,49 @@ export class LocalRegionFilterEngine {
     return this.sortDistinct(Array.from(expanded));
   }
 
+  /**
+   * District names often differ between directory API and GIS layers:
+   * apostrophe characters, optional " tumani" / " shahri" / " shahar" suffixes,
+   * or Cyrillic administrative endings. Used for WHERE clauses and dependent queries.
+   */
+  private getDistrictValueVariants(value: string): string[] {
+    const raw = String(value ?? "").trim();
+    if (!raw) return [];
+
+    const expanded = new Set<string>();
+    const push = (candidate: string): void => {
+      const clean = String(candidate ?? "").trim();
+      if (!clean) return;
+      expanded.add(clean);
+      this.getApostropheVariants(clean).forEach((variant) =>
+        expanded.add(variant),
+      );
+    };
+
+    push(raw);
+
+    const lower = raw.toLowerCase();
+    const suffixes = [
+      " tumani",
+      " shahri",
+      " shahar",
+      " тумани",
+      " шаҳри",
+      " район",
+    ];
+
+    for (const suf of suffixes) {
+      const s = suf.toLowerCase();
+      if (lower.endsWith(s)) {
+        push(raw.slice(0, raw.length - suf.length).trim());
+      } else {
+        push(`${raw}${suf}`);
+      }
+    }
+
+    return this.sortDistinct(Array.from(expanded));
+  }
+
   private whereTextMatches(
     field: string,
     value: string,
@@ -558,19 +621,28 @@ export class LocalRegionFilterEngine {
 
     // Helper: resolve field and push if present
     const pushIfHas = (field: string, value: string, forceNumeric = false) => {
-      if (!value || !ds) return;
-      const resolved = this.resolveFieldName(ds, field);
-      if (resolved) {
-        const clause =
-          !forceNumeric && field === "viloyat"
-            ? this.whereTextMatches(
-                resolved,
-                value,
-                this.getRegionValueVariants(value),
-              )
-            : this.whereEq(resolved, value, forceNumeric);
-        c.push(clause);
+      if (!value) return;
+      const resolved = ds
+        ? (this.resolveFieldName(ds, field) ?? field)
+        : field;
+
+      let clause = "";
+      if (!forceNumeric && field === "viloyat") {
+        clause = this.whereTextMatches(
+          resolved,
+          value,
+          this.getRegionValueVariants(value),
+        );
+      } else if (!forceNumeric && field === "tuman") {
+        clause = this.whereTextMatches(
+          resolved,
+          value,
+          this.getDistrictValueVariants(value),
+        );
+      } else {
+        clause = this.whereEq(resolved, value, forceNumeric);
       }
+      if (clause) c.push(clause);
     };
 
     // Single-DS mode: include yil
@@ -580,21 +652,21 @@ export class LocalRegionFilterEngine {
 
     pushIfHas("viloyat", filters.viloyat);
     pushIfHas("tuman", filters.tuman);
-    if (filters.mavsum && ds) {
-      const resolved = this.resolveFieldName(ds, "mavsum");
-      if (resolved) {
-        const mavsumValues = this.getMavsumGroupedValues(filters.mavsum);
-        if (mavsumValues.length > 1) {
-          const mavsumClauses = mavsumValues
-            .map((value) => this.whereEq(resolved, value))
-            .filter(Boolean);
-          if (mavsumClauses.length > 0) {
-            c.push(`(${mavsumClauses.join(" OR ")})`);
-          }
-        } else if (mavsumValues.length === 1) {
-          const single = this.whereEq(resolved, mavsumValues[0]);
-          if (single) c.push(single);
+    if (filters.mavsum) {
+      const resolved = ds
+        ? (this.resolveFieldName(ds, "mavsum") ?? "mavsum")
+        : "mavsum";
+      const mavsumValues = this.getMavsumGroupedValues(filters.mavsum);
+      if (mavsumValues.length > 1) {
+        const mavsumClauses = mavsumValues
+          .map((value) => this.whereEq(resolved, value))
+          .filter(Boolean);
+        if (mavsumClauses.length > 0) {
+          c.push(`(${mavsumClauses.join(" OR ")})`);
         }
+      } else if (mavsumValues.length === 1) {
+        const single = this.whereEq(resolved, mavsumValues[0]);
+        if (single) c.push(single);
       }
     }
     pushIfHas("fermer_nom", filters.fermer_nom);
